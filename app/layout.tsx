@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Supper Club | Recipe ideas",
+  title: "Recipe Generator",
   description: "Choose a dish, pick your ingredients, and get three recipe ideas."
 };
 
