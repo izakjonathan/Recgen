@@ -1,6 +1,13 @@
 export const runtime = "nodejs";
 
 const styles = ["Salad", "Potato", "Soup", "Pasta", "Curry", "Stew"];
+const accountErrors: Record<string, string> = {
+  credit_balance_exhausted: "Your OpenAI API credit balance is empty. Add credits in OpenAI Platform billing, then try again.",
+  insufficient_quota: "Your OpenAI API account has no available quota. Check billing and usage limits in OpenAI Platform.",
+  organization_spend_limit_exceeded: "Your OpenAI organization has reached its API spending limit. Check its limits in OpenAI Platform.",
+  project_spend_limit_exceeded: "This OpenAI project has reached its API spending limit. Check its project limits in OpenAI Platform.",
+  organization_usage_limit_exceeded: "Your OpenAI organization has reached its API usage limit. Check its limits in OpenAI Platform."
+};
 const schema = {
   type: "object",
   properties: {
@@ -53,8 +60,15 @@ export async function POST(request: Request) {
       signal: AbortSignal.timeout(45000)
     });
     if (!result.ok) {
-      const status = result.status === 429 ? 429 : 502;
-      return Response.json({ error: status === 429 ? "Recipe generation is busy. Please try again shortly." : "Could not generate recipes right now. Check the API key and try again." }, { status });
+      const failure = await result.json().catch(() => null) as { error?: { code?: string | null; type?: string | null } } | null;
+      const code = failure?.error?.code || failure?.error?.type || "unknown";
+      console.warn("OpenAI recipe request failed", { status: result.status, code, requestId: result.headers.get("x-request-id") });
+      if (result.status === 429) {
+        const error = accountErrors[code] || (failure?.error?.type === "insufficient_quota" ? accountErrors.insufficient_quota : "OpenAI is limiting requests right now. Wait a moment before trying again. If it continues, check your API billing and limits.");
+        return Response.json({ error }, { status: 429 });
+      }
+      if (result.status === 401 || result.status === 403) return Response.json({ error: "The OpenAI API key cannot access this request. Check the key and project permissions in OpenAI Platform." }, { status: 502 });
+      return Response.json({ error: "Could not generate recipes right now. Please try again shortly." }, { status: 502 });
     }
     const data = await result.json();
     const output = data.output?.flatMap((item: { content?: { type: string; text?: string }[] }) => item.content || [])
