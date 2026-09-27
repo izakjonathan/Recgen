@@ -1,13 +1,8 @@
+import { getVercelOidcToken } from "@vercel/oidc";
+
 export const runtime = "nodejs";
 
 const styles = ["Salad", "Potato", "Soup", "Pasta", "Curry", "Stew"];
-const accountErrors: Record<string, string> = {
-  credit_balance_exhausted: "Your OpenAI API credit balance is empty. Add credits in OpenAI Platform billing, then try again.",
-  insufficient_quota: "Your OpenAI API account has no available quota. Check billing and usage limits in OpenAI Platform.",
-  organization_spend_limit_exceeded: "Your OpenAI organization has reached its API spending limit. Check its limits in OpenAI Platform.",
-  project_spend_limit_exceeded: "This OpenAI project has reached its API spending limit. Check its project limits in OpenAI Platform.",
-  organization_usage_limit_exceeded: "Your OpenAI organization has reached its API usage limit. Check its limits in OpenAI Platform."
-};
 const schema = {
   type: "object",
   properties: {
@@ -42,16 +37,13 @@ export async function POST(request: Request) {
   if (!styles.includes(style as string) || !["Light", "Hearty"].includes(weight as string) || !validIngredients(ingredients)) {
     return Response.json({ error: "Choose a style, a feel, and at least one ingredient." }, { status: 400 });
   }
-  if (!process.env.OPENAI_API_KEY) {
-    return Response.json({ error: "Recipe generation is not configured yet. Add OPENAI_API_KEY to the server environment." }, { status: 503 });
-  }
-
   try {
-    const result = await fetch("https://api.openai.com/v1/responses", {
+    const token = await getVercelOidcToken();
+    const result = await fetch("https://ai-gateway.vercel.sh/v1/responses", {
       method: "POST",
-      headers: { "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+      headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
+        model: "poolside/laguna-s-2.1-free",
         store: false,
         instructions: "You are a practical home cook. Return exactly three genuinely different, appetising recipes. Respect the chosen dish style and light/hearty preference. Use every selected ingredient somewhere in each recipe when plausible; if that would make a poor dish, use most of them and keep the dish coherent. You may add ordinary pantry basics and a few other ingredients, listing all additions explicitly. Do not assume allergies or dietary restrictions. Give usable quantities for 2 servings, realistic cooking times, and concise numbered cooking steps. Never claim an ingredient was selected when it was not.",
         input: `Dish style: ${style}\nFeel: ${weight}\nSelected ingredients: ${(ingredients as string[]).map(x => x.trim()).join(", ")}\nMake the three ideas meaningfully distinct in flavour or preparation.`,
@@ -62,12 +54,11 @@ export async function POST(request: Request) {
     if (!result.ok) {
       const failure = await result.json().catch(() => null) as { error?: { code?: string | null; type?: string | null } } | null;
       const code = failure?.error?.code || failure?.error?.type || "unknown";
-      console.warn("OpenAI recipe request failed", { status: result.status, code, requestId: result.headers.get("x-request-id") });
+      console.warn("AI Gateway recipe request failed", { status: result.status, code, requestId: result.headers.get("x-request-id") });
       if (result.status === 429) {
-        const error = accountErrors[code] || (failure?.error?.type === "insufficient_quota" ? accountErrors.insufficient_quota : "OpenAI is limiting requests right now. Wait a moment before trying again. If it continues, check your API billing and limits.");
-        return Response.json({ error }, { status: 429 });
+        return Response.json({ error: "The free recipe model is busy or has reached its rate limit. Please try again shortly." }, { status: 429 });
       }
-      if (result.status === 401 || result.status === 403) return Response.json({ error: "The OpenAI API key cannot access this request. Check the key and project permissions in OpenAI Platform." }, { status: 502 });
+      if (result.status === 401 || result.status === 403) return Response.json({ error: "The free recipe model is unavailable for this Vercel project." }, { status: 502 });
       return Response.json({ error: "Could not generate recipes right now. Please try again shortly." }, { status: 502 });
     }
     const data = await result.json();
