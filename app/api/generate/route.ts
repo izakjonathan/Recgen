@@ -1,4 +1,5 @@
 import { getVercelOidcToken } from "@vercel/oidc";
+import { fallbackRecipes } from "./fallback";
 
 export const runtime = "nodejs";
 
@@ -37,6 +38,10 @@ export async function POST(request: Request) {
   if (!styles.includes(style as string) || !["Light", "Hearty"].includes(weight as string) || !validIngredients(ingredients)) {
     return Response.json({ error: "Choose a style, a feel, and at least one ingredient." }, { status: 400 });
   }
+  const fallback = () => Response.json({
+    recipes: fallbackRecipes(style as "Salad" | "Potato" | "Soup" | "Pasta" | "Curry" | "Stew", weight as "Light" | "Hearty", (ingredients as string[]).map(x => x.trim()), Math.floor(Math.random() * 3)),
+    source: "built-in"
+  }, { headers: { "Cache-Control": "no-store" } });
   try {
     const token = await getVercelOidcToken();
     const result = await fetch("https://ai-gateway.vercel.sh/v1/responses", {
@@ -55,11 +60,7 @@ export async function POST(request: Request) {
       const failure = await result.json().catch(() => null) as { error?: { code?: string | null; type?: string | null } } | null;
       const code = failure?.error?.code || failure?.error?.type || "unknown";
       console.warn("AI Gateway recipe request failed", { status: result.status, code, requestId: result.headers.get("x-request-id") });
-      if (result.status === 429) {
-        return Response.json({ error: "The free recipe model is busy or has reached its rate limit. Please try again shortly." }, { status: 429 });
-      }
-      if (result.status === 401 || result.status === 403) return Response.json({ error: "The free recipe model is unavailable for this Vercel project." }, { status: 502 });
-      return Response.json({ error: "Could not generate recipes right now. Please try again shortly." }, { status: 502 });
+      return fallback();
     }
     const data = await result.json();
     const output = data.output?.flatMap((item: { content?: { type: string; text?: string }[] }) => item.content || [])
@@ -67,8 +68,8 @@ export async function POST(request: Request) {
     if (typeof output !== "string") throw new Error("Missing output");
     const parsed = JSON.parse(output);
     if (!Array.isArray(parsed.recipes) || parsed.recipes.length !== 3) throw new Error("Invalid recipes");
-    return Response.json({ recipes: parsed.recipes }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json({ recipes: parsed.recipes, source: "ai" }, { headers: { "Cache-Control": "no-store" } });
   } catch {
-    return Response.json({ error: "Something went wrong while generating recipes. Please try again." }, { status: 502 });
+    return fallback();
   }
 }
