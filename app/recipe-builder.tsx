@@ -34,6 +34,7 @@ export default function RecipeBuilder() {
   const [draftTheme, setDraftTheme] = useState<Theme>(defaultTheme);
   const [studioMessage, setStudioMessage] = useState("");
   const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [recipeSource, setRecipeSource] = useState<"ai" | "built-in" | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState<number | null>(0);
@@ -94,12 +95,12 @@ export default function RecipeBuilder() {
   }
   async function generate() {
     if (!style || !weight || !selected.length || loading) return;
-    setLoading(true); setError(""); setRecipes([]);
+    setLoading(true); setError(""); setRecipes([]); setRecipeSource(null);
     try {
       const response = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ style, weight, ingredients: selected }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not generate recipes.");
-      setRecipes(data.recipes); setExpanded(0);
+      setRecipes(data.recipes); setRecipeSource(data.source); setExpanded(0);
       requestAnimationFrame(() => document.getElementById("ideas")?.scrollIntoView({ behavior: "smooth", block: "start" }));
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not generate recipes."); }
     finally { setLoading(false); }
@@ -134,7 +135,7 @@ export default function RecipeBuilder() {
 
       <section className="action-section"><button className="generate-button" type="button" disabled={!style || !weight || !selected.length || loading} onClick={generate}>{loading ? "Making your menu…" : recipes.length ? "Generate three more" : "Generate three ideas"}<span aria-hidden="true">↗︎</span></button><p>{selected.length ? `${selected.length} ingredient${selected.length === 1 ? "" : "s"} selected` : "Select at least one ingredient to continue"}</p>{error && <p className="error" role="alert">{error}</p>}</section>
 
-      {(recipes.length > 0 || loading) && <section className="results" id="ideas" aria-live="polite"><div className="results-heading"><p className="eyebrow">YOUR MENU</p><h2>Three ways to make it</h2><p>{style} · {weight}</p></div>{loading ? <div className="loading-card" role="status">Finding three ideas for you…</div> : <div className="recipe-list">{recipes.map((recipe, index) => <article className="recipe-card" key={`${recipe.title}-${index}`}><div className="recipe-meta"><span>IDEA {String(index + 1).padStart(2, "0")}</span><span>{recipe.minutes} MIN · {recipe.servings} SERVINGS</span></div><h3>{recipe.title}</h3><p className="description">{recipe.description}</p><p className="fit">{recipe.whyItFits}</p><button className="recipe-toggle" type="button" aria-expanded={expanded === index} onClick={() => setExpanded(expanded === index ? null : index)}>{expanded === index ? "Hide recipe" : "View recipe"}<span aria-hidden="true">{expanded === index ? "−" : "+"}</span></button>{expanded === index && <div className="recipe-detail"><h4>Ingredients</h4><ul>{recipe.ingredients.map((ingredient, i) => <li key={i}>{ingredient}</li>)}</ul><h4>Method</h4><ol>{recipe.steps.map((step, i) => <li key={i}>{step}</li>)}</ol></div>}</article>)}</div>}</section>}
+      {(recipes.length > 0 || loading) && <section className="results" id="ideas" aria-live="polite"><div className="results-heading"><p className="eyebrow">YOUR MENU</p><h2>Three ways to make it</h2><p>{style} · {weight}</p>{recipeSource === "built-in" && <p>Built-in recipe ideas · AI is unavailable right now</p>}</div>{loading ? <div className="loading-card" role="status">Finding three ideas for you…</div> : <div className="recipe-list">{recipes.map((recipe, index) => <article className="recipe-card" key={`${recipe.title}-${index}`}><div className="recipe-meta"><span>IDEA {String(index + 1).padStart(2, "0")}</span><span>{recipe.minutes} MIN · {recipe.servings} SERVINGS</span></div><h3>{recipe.title}</h3><p className="description">{recipe.description}</p><p className="fit">{recipe.whyItFits}</p><button className="recipe-toggle" type="button" aria-expanded={expanded === index} onClick={() => setExpanded(expanded === index ? null : index)}>{expanded === index ? "Hide recipe" : "View recipe"}<span aria-hidden="true">{expanded === index ? "−" : "+"}</span></button>{expanded === index && <div className="recipe-detail"><h4>Ingredients</h4><ul>{recipe.ingredients.map((ingredient, i) => <li key={i}>{ingredient}</li>)}</ul><h4>Method</h4><ol>{recipe.steps.map((step, i) => <li key={i}>{step}</li>)}</ol></div>}</article>)}</div>}</section>}
     </main>
 
     <nav className="bottom-dock" aria-label="Recipe steps"><a href="#dish">Dish</a><a href="#ingredients">Ingredients</a><a href="#feel">Feel</a><a href="#ideas" aria-disabled={!recipes.length}>{recipes.length ? "Ideas" : "Ideas"}</a></nav>
