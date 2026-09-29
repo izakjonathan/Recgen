@@ -9,7 +9,7 @@ A Next.js recipe catalogue with 120 named vegetarian dishes, each offered in Lig
 
 ## How matching works
 
-The data lives in `app/api/generate/library.ts`. Each recipe defines a title, dish style, core ingredients, flavour profile and description. The server expands the Light and Hearty editions, ranks recipes by selected ingredient overlap and returns three distinct suggestions. The result says how many selected ingredients the recipe actually uses. Other required ingredients are listed in full; checking an ingredient does not force it into an unrelated recipe. “Generate three more” avoids repeats until the selected category has been exhausted.
+The data lives in `app/api/generate/library.ts`. Each recipe defines a title, dish style, core ingredients, flavour profile and description. The server expands the Light and Hearty editions, ranks recipes by natural overlap with the selected ingredients, then adds every remaining selected ingredient to each returned recipe's ingredient list and method. “Generate three more” avoids repeats until the selected category has been exhausted. Custom ingredients are included with a generic quantity and preparation guidance; review the result for culinary fit and safe preparation.
 
 Add recipes by adding a row to the relevant style in `rows`, using `Title|Ingredient,Ingredient|flavourKey|Description`; define quantities for new ingredients in `quantity` and flavour profiles in `flavours`. Existing starters can be changed in `app/recipe-builder.tsx`. The ingredient editor and UI Studio save changes locally in the same browser. Results are not saved after refreshing.
 
