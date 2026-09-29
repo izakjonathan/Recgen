@@ -173,7 +173,7 @@ function makePlan(options: Options, selected: Ingredient[], technique: Technique
     (aromatics.length ? 3 : 0) + (firmUsed ? Math.max(15, firmMinutes) : firmMinutes) +
     (quick.length ? 5 : 0) + (tofu.length ? 8 : 0) + (stock && !liquidUsed ? 10 : 0) + 5;
   const minutes = Math.max(technique.minutes, prepMinutes + activeMinutes);
-  return { title, description: `${technique.label[0].toUpperCase()}${technique.label.slice(1)} with a ${flavour.toLowerCase()} finish and ${options.texture === "Surprise me" ? technique.texture.toLowerCase() : options.texture.toLowerCase()} texture.`, minutes, servings, lines, actions, technique, flavour };
+  return { title, description: `${flavour} finish · ${options.texture === "Surprise me" ? technique.texture : options.texture} texture`, minutes, servings, lines, actions, technique, flavour };
 }
 
 export function generateRecipes(options: Options) {
