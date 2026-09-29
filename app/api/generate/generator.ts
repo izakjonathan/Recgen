@@ -45,6 +45,19 @@ const scaleLine = (line: string, servings: number) => line.replace(/(^| and )(\d
 });
 const hash = (value: string) => { let n = 2166136261; for (const ch of value) n = Math.imul(n ^ ch.charCodeAt(0), 16777619); return n >>> 0; };
 const group = (items: Ingredient[], roles: Ingredient["role"][]) => items.filter(item => roles.includes(item.role));
+function recipeTitle(technique: Technique, items: Ingredient[], round: number, index: number) {
+  const spotlight = items.filter(item => !["aromatic", "finish", "liquid"].includes(item.role));
+  const candidates = spotlight.length ? spotlight : items;
+  const potato = items.find(item => /\bpotato\b/i.test(item.label));
+  const method = technique.label.replace(/\bpotato\b/i, match =>
+    potato ? potato.label.toLowerCase() : match);
+  const methodWords = new Set(method.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []);
+  const featured = candidates.slice((round + index) % candidates.length).concat(candidates.slice(0, (round + index) % candidates.length))
+    .filter(item => !(item.label.toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).some(word => methodWords.has(word)))
+    .slice(0, 2);
+  const title = method[0].toUpperCase() + method.slice(1);
+  return featured.length ? `${title} with ${names(featured)}` : title;
+}
 
 function makePlan(options: Options, selected: Ingredient[], technique: Technique, index: number): Plan {
   const { style, weight, servings } = options;
@@ -152,10 +165,7 @@ function makePlan(options: Options, selected: Ingredient[], technique: Technique
   if (bread) act("serve", [bread], "Serve with the crusty bread.");
   if (!actions.some(action => action.kind !== "prep" && action.ingredientIds.includes(oil))) act("combine", [oil], isSalad ? "Whisk the olive oil into the dressing." : "Finish with a little olive oil.");
   act("finish", [salt], "Taste and season with salt and black pepper before serving.");
-  const spotlight = items.filter(item => !["aromatic", "finish", "liquid"].includes(item.role));
-  const lead = spotlight[(options.round + index) % Math.max(spotlight.length, 1)] ?? items[0];
-  const second = spotlight.filter(item => item !== lead)[(options.round + index) % Math.max(spotlight.length - 1, 1)];
-  const title = `${lead.label}${second ? ` and ${second.label.toLowerCase()}` : ""} ${technique.label} · ${flavour.toLowerCase()}`;
+  const title = recipeTitle(technique, items, options.round, index);
   const prepMinutes = 6 + items.length * 2 + (servings > 2 ? 3 : 0);
   const firmMinutes = firm.length ? Math.max(...firm.map(item => item.cookMinutes)) : 0;
   const activeMinutes = roasted ? Math.max(firm.length ? 35 : 20, 15) + 5 :
@@ -174,10 +184,9 @@ export function generateRecipes(options: Options) {
   const valid = candidates.filter(plan => !validatePlan(plan, selected, options.pace));
   const setError = validateSet(valid);
   if (setError) throw new Error(setError);
-  return valid.map((plan, index) => ({
+  return valid.map(plan => ({
     id: `${hash(`${selected.map(item => item.id).join("|")}|${options.style}|${options.weight}`)}-${options.round}-${plan.technique.id}`,
     title: plan.title, description: plan.description, minutes: plan.minutes, servings: plan.servings,
-    ingredients: plan.lines.map(line => line.text), steps: plan.actions.map(action => action.text),
-    whyItFits: `Uses all ${selected.length} chosen ingredient${selected.length === 1 ? "" : "s"}. Different cooking approach: ${plan.technique.label}.`
+    ingredients: plan.lines.map(line => line.text), steps: plan.actions.map(action => action.text)
   }));
 }
