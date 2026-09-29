@@ -1,3 +1,4 @@
+import { generateCurries } from "./curry-planner";
 import { catalogue, formatIngredient, normalize, resolveIngredients, type CustomKind, type Ingredient } from "../../ingredient-catalogue";
 import { blueprints, names, type Action, type Feel, type Flavour, type Heat, type IngredientLine, type Pace, type Plan, type Style, type Technique, type Texture } from "./blueprints";
 import { validatePlan, validateSelection, validateSet } from "./validation";
@@ -180,6 +181,7 @@ export function generateRecipes(options: Options) {
   const selected = resolveIngredients(options.ingredients, options.customKinds);
   const selectionError = validateSelection(options.style, selected);
   if (selectionError) throw new Error(selectionError);
+  if (options.style === "Curry") return generateCurries(options, selected);
   const candidates = blueprints[options.style].techniques.map((technique, index) => makePlan(options, selected, technique, index));
   const valid = candidates.filter(plan => !validatePlan(plan, selected, options.pace));
   const setError = validateSet(valid);
