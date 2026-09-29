@@ -175,6 +175,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px s
 .add-form label { display: block; margin-bottom: .4rem; font-size: .82rem; font-weight: 700; }
 .add-form > div { display: flex; gap: .45rem; }
 .add-form input { min-width: 0; flex: 1; height: 2.75rem; border: 1px solid var(--line); border-radius: .7rem; padding: .45rem .7rem; color: var(--ink); background: var(--canvas); font-size: 1rem; }
+.add-form input::placeholder { color: var(--ink); opacity: 1; }
 .add-form button { min-height: 2.75rem; border: 1px solid var(--ink); border-radius: .7rem; padding: 0 .9rem; color: var(--canvas); background: var(--ink); font-size: .82rem; font-weight: 700; }
 .add-form > label:not(:first-child) { margin: .75rem 0 .35rem; }
 .custom-hint { margin: .4rem 0 0; color: var(--muted); font-size: .76rem; line-height: 1.4; }
