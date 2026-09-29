@@ -62,6 +62,14 @@ const key = (value: string) => value.trim().toLocaleLowerCase().replace(/\s+/g, 
 const list = (names: string[]) => names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 const hash = (value: string) => { let n = 2166136261; for (const character of value) n = Math.imul(n ^ character.charCodeAt(0), 16777619); return n >>> 0; };
 const scale = (amount: string, servings: number) => {
+  if (amount.startsWith("½")) {
+    const value = servings / 4;
+    return `${Number.isInteger(value) ? value : `${Math.floor(value) || ""}½`}${amount.slice(1)}`;
+  }
+  if (amount.startsWith("¼")) {
+    const value = servings / 8;
+    return `${value === .25 ? "¼" : value === .5 ? "½" : value === .75 ? "¾" : value}${amount.slice(1)}`;
+  }
   const match = amount.match(/^(\d+(?:\.\d+)?)\b/);
   if (!match) return amount; // Keep sensible fractional units (½ cucumber, etc.) as written.
   const value = Number(match[1]) * servings / 2;
@@ -97,12 +105,18 @@ function makeRecipe(options: Options, variant: number) {
     Curry: `${scale(weight === "Hearty" ? "150 g" : "100 g", servings)} dry rice`,
     Stew: weight === "Hearty" ? `${servings} slices crusty bread` : "fresh herbs, to finish"
   };
-  const pantry = style === "Soup" || style === "Stew" ? [`${scale("600 ml", servings)} vegetable stock`] : style === "Curry" ? [liquid.length ? "150 ml water, as needed" : "250 ml vegetable stock or water"] : [];
-  const selectedLines = items.map(item => `${scale(item.amount, servings)} ${item.name}`);
+  const pantry = style === "Soup" || style === "Stew" ? [`${scale("600 ml", servings)} vegetable stock`] : style === "Curry" ? [liquid.length ? "150 ml water, as needed" : `${scale("250 ml", servings)} vegetable stock or water`] : [];
+  const selectedLines = items.map(item => {
+    const amount = scale(item.amount, servings);
+    const multiple = Number(amount.match(/^\d+(?:\.\d+)?/)?.[0] ?? 0) > 1 && item.amount.startsWith("1");
+    const unit = multiple ? amount.replace(/\btin\b/, "tins") : amount;
+    const name = multiple && ["onion", "courgette", "aubergine", "lemon", "red pepper", "sweet potato", "cucumber"].includes(key(item.name)) ? `${item.name}s` : item.name;
+    return `${unit} ${name}`;
+  });
   if (style === "Potato" && !items.some(item => ["potato", "sweet potato"].includes(key(item.label)))) selectedLines.unshift(`${scale("400 g", servings)} potatoes`);
-  const extraLines = profile.extras.filter(extra => !items.some(item => key(extra).includes(key(item.label))));
-  const chilli = heat === "Mild" ? [] : [heat === "Hot" ? "1 tsp chilli flakes" : "¼ tsp chilli flakes"];
-  const allLines = [...selectedLines, base[style], ...pantry, ...extraLines, ...chilli, "1 tbsp olive oil", "Salt and black pepper, to taste"];
+  const extraLines = profile.extras.filter(extra => !items.some(item => key(extra).includes(key(item.label)))).map(extra => scale(extra, servings));
+  const chilli = heat === "Mild" ? [] : [scale(heat === "Hot" ? "1 tsp chilli flakes" : "¼ tsp chilli flakes", servings)];
+  const allLines = [...selectedLines, base[style], ...pantry, ...extraLines, ...chilli, `${scale("1 tbsp", servings)} olive oil`, "Salt and black pepper, to taste"];
   const prep = `Prepare the chosen ingredients: ${list(items.map(item => item.prep))}${style === "Potato" && !items.some(item => ["potato", "sweet potato"].includes(key(item.label))) ? "; dice the added potatoes into 2 cm pieces" : ""}.`;
   const steps = [prep];
   if (style === "Pasta") steps.push("Cook the pasta in salted water until just tender, reserving a mug of pasta water before draining.");
