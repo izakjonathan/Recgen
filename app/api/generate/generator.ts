@@ -50,6 +50,17 @@ const profiles: Record<Exclude<Flavour, "Surprise me">, { extras: string[]; sauc
   Umami: { extras: ["1 tsp white miso"], sauce: "Dissolve the miso in a spoonful of warm water and stir it through off the heat.", finish: "Taste before adding more salt." }
 };
 const flavourNames = Object.keys(profiles) as Exclude<Flavour, "Surprise me">[];
+const accents = [
+  { name: "parsley", ingredient: "1 tbsp chopped parsley", step: "Scatter parsley over the finished dish." },
+  { name: "lemon zest", ingredient: "1 tsp lemon zest", step: "Add lemon zest just before serving." },
+  { name: "toasted cumin", ingredient: "½ tsp ground cumin", step: "Toast the cumin briefly in a dry pan, then scatter it over the dish." },
+  { name: "oregano", ingredient: "1 tsp dried oregano", step: "Rub the oregano between your fingers and sprinkle it over the dish." },
+  { name: "lime", ingredient: "½ lime", step: "Squeeze the lime over the finished dish." },
+  { name: "dill", ingredient: "1 tbsp chopped dill", step: "Scatter dill over the finished dish." },
+  { name: "basil", ingredient: "1 handful basil leaves", step: "Tear the basil over the dish just before serving." },
+  { name: "black pepper", ingredient: "½ tsp cracked black pepper", step: "Add a final crack of black pepper." },
+  { name: "chives", ingredient: "1 tbsp chopped chives", step: "Scatter chives over the finished dish." }
+];
 const techniques: Record<Style, { name: string; texture: Exclude<Texture, "Surprise me">; minutes: number }[]> = {
   Salad: [{ name: "chopped bowl", texture: "Fresh", minutes: 25 }, { name: "warm salad", texture: "Tender", minutes: 30 }, { name: "charred salad", texture: "Crisp", minutes: 35 }],
   Potato: [{ name: "skillet", texture: "Tender", minutes: 30 }, { name: "crisp tray", texture: "Crisp", minutes: 40 }, { name: "bowl", texture: "Fresh", minutes: 30 }],
@@ -90,10 +101,11 @@ function makeRecipe(options: Options, variant: number) {
   const choice = (timely.length ? timely : matching)[(options.round * 3 + variant) % (timely.length || matching.length)];
   const profileName = options.flavour === "Surprise me" ? flavourNames[(seed + variant) % flavourNames.length] : options.flavour;
   const profile = profiles[profileName];
+  const accent = accents[(options.round * 3 + variant) % accents.length];
   const order = [...items].filter(item => item.role !== "liquid" && item.role !== "finish");
   const lead = order.length ? order[(options.round + variant) % order.length] : items[(options.round + variant) % items.length];
   const second = order.filter(item => item !== lead)[(options.round + variant) % Math.max(1, order.length - 1)];
-  const title = `${profileName} ${lead.label.toLowerCase()}${second ? ` and ${second.label.toLowerCase()}` : ""} ${choice.name}`;
+  const title = `${profileName} ${lead.label.toLowerCase()}${second ? ` and ${second.label.toLowerCase()}` : ""} ${choice.name} with ${accent.name}`;
   const grouped = (roles: Role[]) => items.filter(item => roles.includes(item.role)).map(item => item.name.toLowerCase());
   const potatoAnchor = style === "Potato" && !items.some(item => ["potato", "sweet potato"].includes(key(item.label))) ? ["potatoes"] : [];
   const aromatics = grouped(["aromatic"]), firm = [...potatoAnchor, ...grouped(["firm"])], quick = grouped(["quick"]), proteins = grouped(["protein"]), leaves = grouped(["leaf"]), finish = grouped(["finish"]), liquid = grouped(["liquid"]);
@@ -116,7 +128,7 @@ function makeRecipe(options: Options, variant: number) {
   if (style === "Potato" && !items.some(item => ["potato", "sweet potato"].includes(key(item.label)))) selectedLines.unshift(`${scale("400 g", servings)} potatoes`);
   const extraLines = profile.extras.filter(extra => !items.some(item => key(extra).includes(key(item.label)))).map(extra => scale(extra, servings));
   const chilli = heat === "Mild" ? [] : [scale(heat === "Hot" ? "1 tsp chilli flakes" : "¼ tsp chilli flakes", servings)];
-  const allLines = [...selectedLines, base[style], ...pantry, ...extraLines, ...chilli, `${scale("1 tbsp", servings)} olive oil`, "Salt and black pepper, to taste"];
+  const allLines = [...selectedLines, base[style], ...pantry, ...extraLines, scale(accent.ingredient, servings), ...chilli, `${scale("1 tbsp", servings)} olive oil`, "Salt and black pepper, to taste"];
   const prep = `Prepare the chosen ingredients: ${list(items.map(item => item.prep))}${style === "Potato" && !items.some(item => ["potato", "sweet potato"].includes(key(item.label))) ? "; dice the added potatoes into 2 cm pieces" : ""}.`;
   const steps = [prep];
   if (style === "Pasta") steps.push("Cook the pasta in salted water until just tender, reserving a mug of pasta water before draining.");
@@ -147,6 +159,7 @@ function makeRecipe(options: Options, variant: number) {
   if (style === "Soup" || style === "Stew") steps.push(weight === "Hearty" ? "Serve with the crusty bread." : "Scatter fresh herbs over the bowl.");
   if (finish.length) steps.push(`Add ${list(finish)} at the end, off the heat${style === "Salad" ? "" : ", so they keep their fresh flavour"}.`);
   if (items.some(item => item.custom)) steps.push(`For ${list(items.filter(item => item.custom).map(item => item.label.toLowerCase()))}, follow any required cooking and food safety instructions on the packaging before serving.`);
+  steps.push(accent.step);
   steps.push(`${profile.finish} Taste and season with salt and black pepper.`);
   return { id: `${hash(selected.map(key).join("|"))}-${options.round}-${variant}`, title: title.charAt(0).toUpperCase() + title.slice(1), description: `${choice.name.charAt(0).toUpperCase()}${choice.name.slice(1)} with a ${profileName.toLowerCase()} finish. ${weight === "Hearty" ? "A filling" : "A lighter"} version with ${heat.toLowerCase()} heat.`, minutes: choice.minutes, servings, ingredients: allLines, steps, whyItFits: `Uses all ${items.length} chosen ingredient${items.length === 1 ? "" : "s"}.` };
 }
