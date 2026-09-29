@@ -1,13 +1,16 @@
 # Recipe Generator
 
-A Next.js vegetarian recipe generator that creates three recipes from the selected dish, ingredients, Light/Hearty setting, flavour, texture, cooking time, heat and servings. It runs locally on the server without an API key or usage credits.
+A Next.js recipe generator that builds three distinct dish approaches from the selected ingredients and preferences. No OpenAI API key or paid generation service is required.
 
-## Run locally
+## Run
 
-Run `npm install` and `npm run dev`.
+Run `npm install`, then `npm run dev`. Run `npm run build` for a production build.
 
-## How generation works
+## Recipe architecture
 
-`app/api/generate/generator.ts` contains ingredient preparation metadata, dish techniques and flavour profiles. It combines the selected parameters to build a title, scaled ingredient list and ordered cooking method. All chosen ingredients are included in each result. “Generate three more” changes the variation round. The number of possible combinations is large and grows as ingredients are added, but repeated requests with identical choices may eventually produce similar dishes; this is a rule based generator, not a language model.
+- `app/ingredient-catalogue.ts` contains structured ingredients: quantity, unit, preparation, cooking role, approximate cooking time and roasting suitability. The same metadata is available to the ingredient editor. Added custom ingredients require a preparation type (vegetable to cook, already cooked food, fresh garnish or sauce). Dried beans or other ingredients requiring special treatment need a dedicated catalogue entry.
+- `app/api/generate/blueprints.ts` defines three cooking approaches per dish style. The generator builds an ordered plan of cooking actions and ingredient references from these blueprints.
+- `app/api/generate/validation.ts` rejects a plan if a chosen ingredient is merely named in prep, if any listed ingredient never enters the method, if quantities are duplicated, or if the requested time cannot yield three different approaches. It also rejects a few known incompatible combinations and overly large selections rather than forcing every ingredient into an implausible dish.
+- `app/api/generate/generator.ts` assembles and scales quantities, picks flavour variants, builds methods and returns validated recipes. Flavour and texture settings adjust the result; methods are genuinely different within a set of three.
 
-The starter ingredient list is in `app/recipe-builder.tsx`. You can add or remove ingredients in the site's ingredient editor; the list and UI Studio colours are saved in the browser. For a custom ingredient without known preparation metadata, the generator includes it with a generic quantity and advises following its food safety instructions. Add its quantity, role and preparation in `known` to get a fully tailored method. Review generated recipes before cooking, especially custom ingredients or unusually large selections.
+Quantities and times are estimates; generated combinations still need real cooking trials. Custom ingredient classification is a user declaration, not a food-safety guarantee. Parmigiano Reggiano/Parmesan may use animal rennet, so check the product if a strictly vegetarian dish is required. The ingredient editor and UI Studio save settings in the browser; generated recipes are not saved after refresh. With fixed inputs and a finite set of blueprints, repeated requests can eventually resemble earlier recipes.
