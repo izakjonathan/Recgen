@@ -68,14 +68,14 @@ const rows: Record<Style, string[]> = {
     "Courgette ribbon and Parmesan salad|Courgette,Parmesan,Rocket|lemon|Delicate courgette ribbons",
     "Pumpkin, spinach and chickpea salad|Pumpkin,Spinach,Chickpeas|tahini|A warm autumn bowl",
     "White bean, tomato and spring onion salad|White beans,Tomato,Spring onion|dill|Fresh, quick and generously herbed",
-    "Green bean, potato and egg-free Niçoise|Green beans,Potato,Tomato|mustard|A classic-inspired vegetable salad",
+    "Green bean and tomato potato salad|Green beans,Potato,Tomato|mustard|A classic-inspired vegetable salad",
     "Kale, carrot and peanut salad|Kale,Carrot,Cucumber|peanut|Shredded greens with a creamy dressing"
   ],
   Potato: [
     "Garlic and rosemary roasted potatoes|Potato,Garlic,Onion|rosemary|Crisp edges and soft centres",
     "Smashed potatoes with chickpeas|Potato,Chickpeas,Spinach|tahini|Crunchy potatoes with creamy chickpeas",
     "Potato and courgette hash|Potato,Courgette,Onion|smoky|A golden one-pan hash",
-    "Creamy potato and onion bake|Potato,Onion,Parmesan|parmesan|Thin layers baked until golden",
+    "Golden potato and onion bake|Potato,Onion,Parmesan|parmesan|Thin layers baked until golden",
     "Potato, butter bean and tomato traybake|Potato,Butter beans,Tomato|balsamic|A hearty oven tray of vegetables",
     "Spiced potato and pea skillet|Potato,Peas,Onion|masala|A gently spiced pan of potatoes",
     "Lemon potato and green bean bowl|Potato,Green beans,Garlic|lemon|Bright potatoes with crisp beans",
@@ -83,7 +83,7 @@ const rows: Record<Style, string[]> = {
     "Potato, mushroom and spinach skillet|Potato,Mushrooms,Spinach|rosemary|Earthy mushrooms and golden potatoes",
     "Harissa potatoes with yogurt|Potato,Carrot,Onion|harissa|Roasted roots with a fiery finish",
     "Paprika potato and chickpea bake|Potato,Chickpeas,Tomato|paprika|A smoky tomato potato bake",
-    "Potato, broccoli and cheese gratin|Potato,Broccoli,Parmesan|parmesan|A golden, cheesy vegetable dish",
+    "Roasted potato and broccoli with Parmesan|Potato,Broccoli,Parmesan|parmesan|A golden, cheesy vegetable dish",
     "Ginger sweet potato and lentil skillet|Sweet potato,Lentils,Spinach|ginger|Sweet roots with savoury lentils",
     "Roasted potato and aubergine pan|Potato,Aubergine,Onion|cumin|Soft aubergine and crisp potatoes",
     "Crispy potatoes with coriander chutney-style sauce|Potato,Coriander,Garlic|coriander|An herby, citrusy potato plate",
@@ -208,20 +208,40 @@ export function recipeFromEntry(entry: (typeof catalogue)[number], selected: str
   const sauceIngredients = core.some(key => profile.tags.includes(key))
     ? profile.ingredients.filter(line => !profile.tags.some(tag => core.includes(tag) && line.toLowerCase().includes(tag.toLowerCase())))
     : profile.ingredients;
-  const ingredientList = [...new Set([...main, base[style], ...extras, ...sauceIngredients, "1 tbsp olive oil for cooking", "Salt and black pepper, to taste"])];
-  const coreNames = core.join(", ").toLowerCase();
-  const prep = style === "Salad"
-    ? `Wash and prepare ${coreNames}. Cook potatoes or squash until tender, pan-fry tofu, and use drained canned beans or lentils; let warm items cool slightly.`
-    : style === "Potato"
-      ? `Cut the potato or sweet potato into bite-size pieces. Chop ${coreNames.replace(/potato,? ?/g, "") || "the remaining vegetables"}.`
-      : `Wash and chop ${coreNames}; drain canned beans or lentils and cube tofu if using.`;
+  const oil = [...main, ...sauceIngredients].some(item => item.includes("olive oil")) ? [] : ["1 tbsp olive oil for cooking"];
+  const ingredientList = [...new Set([...main, base[style], ...extras, ...sauceIngredients, ...oil, "Salt and black pepper, to taste"])];
+  const prepMap: Record<string, string> = {
+    Potato: "cut the potatoes into small pieces", "Sweet potato": "peel and cube the sweet potato",
+    Tomato: "chop the tomatoes", Onion: "slice the onion", Garlic: "mince the garlic",
+    Courgette: style === "Salad" ? "shave the courgette into ribbons" : "dice the courgette",
+    Carrot: style === "Salad" ? "grate the carrots" : "slice the carrots",
+    Spinach: "wash the spinach", "Butter beans": "drain and rinse the canned butter beans",
+    Chickpeas: "drain and rinse the canned chickpeas", Lentils: "drain the cooked lentils",
+    Tofu: "pat dry and cube the tofu", Coriander: "chop the coriander",
+    Ginger: "grate the ginger", "Coconut milk": "shake the coconut milk",
+    Parmesan: "grate the Parmesan", Lemon: "zest and juice the lemon",
+    Cucumber: "dice the cucumber", Feta: "crumble the feta", Peas: "measure the frozen peas",
+    Mushrooms: "slice the mushrooms", Aubergine: "cube the aubergine",
+    Broccoli: "cut the broccoli into florets",
+    Kale: "strip and chop the kale", "Red pepper": "slice the red pepper",
+    "Green beans": "trim the green beans", Pumpkin: "peel and cube the squash",
+    "White beans": "drain and rinse the canned white beans", Rocket: "wash the rocket",
+    "Spring onion": "slice the spring onions", Celery: "slice the celery"
+  };
+  const prep = `Prepare the main ingredients: ${core.map(key => prepMap[key] ?? `prepare the ${key.toLowerCase()}`).join("; ")}.`;
+  const longCook = core.filter(key => ["Potato", "Sweet potato", "Pumpkin", "Carrot", "Aubergine", "Broccoli", "Green beans", "Courgette", "Mushrooms", "Red pepper", "Onion", "Celery"].includes(key));
+  const lateCook = core.filter(key => ["Spinach", "Kale", "Peas", "Tofu", "Chickpeas", "Butter beans", "Lentils", "White beans"].includes(key));
+  const names = (list: string[]) => list.map(name => name.toLowerCase()).join(", ");
+  const late = lateCook.length ? ` Add ${names(lateCook)} for the final 3–5 minutes.` : "";
+  const saladCook = core.filter(key => ["Potato", "Sweet potato", "Pumpkin", "Aubergine", "Broccoli", "Green beans", "Courgette", "Mushrooms", "Tofu"].includes(key));
+  const soften = longCook.length ? `Soften ${names(longCook)} in a little oil for 5 minutes.` : "Warm a little oil in the pan.";
   const cook: Record<Style, string> = {
-    Salad: "Cook potatoes, squash, broccoli, green beans, aubergine or tofu if included; keep tomatoes, cucumber, salad leaves and fresh herbs uncooked.",
-    Potato: "Roast potatoes and firm vegetables with a little oil at 210°C for 25–35 minutes until golden; add greens and drained beans for the last 5 minutes.",
-    Soup: "Soften firm vegetables in a saucepan with a little oil for 5 minutes. Add the stock, simmer 15–20 minutes until tender, then stir in greens and drained beans for 3 minutes.",
-    Pasta: `Boil ${hearty ? "220" : "160"} g pasta in salted water until tender. Cook the chopped vegetables in a little oil for 6–10 minutes; add greens and drained beans near the end. Save a splash of pasta water.`,
-    Curry: `Cook ${hearty ? "150" : "100"} g rice according to the packet. Soften firm vegetables in a little oil for 5 minutes, add 150 ml water and simmer 12–18 minutes until tender. Add tofu, greens and drained beans near the end.`,
-    Stew: "Soften firm vegetables in a little oil for 5 minutes. Add vegetable stock and simmer 20–25 minutes until tender; add greens and drained beans for the final 5 minutes."
+    Salad: `Cook ${names(saladCook)} until tender and let cool slightly. Keep the other ingredients fresh.`,
+    Potato: `Roast ${names(longCook)} with a little oil at 210°C for 25–35 minutes until golden.${late}`,
+    Soup: `${soften} Add the vegetable stock and simmer 15–20 minutes until tender.${late}`,
+    Pasta: `Boil the pasta in salted water until tender. ${longCook.length ? `Cook ${names(longCook)} in a little oil for 6–10 minutes.` : "Warm a little oil in a pan."}${late} Save a splash of pasta water.`,
+    Curry: `Cook the rice according to the packet. ${soften} Add ${core.includes("Coconut milk") ? "the coconut milk" : "150 ml water"} and simmer 12–18 minutes until tender.${late}`,
+    Stew: `${soften} Add the stock and simmer 20–25 minutes until tender.${late}`
   };
   const combine: Record<Style, string> = {
     Salad: `Combine the prepared ingredients with ${hearty ? "cooked grains" : "salad leaves"}. ${profile.sauce} ${profile.finish}`,
@@ -242,7 +262,7 @@ export function recipeFromEntry(entry: (typeof catalogue)[number], selected: str
     minutes: style === "Stew" ? 40 : style === "Potato" ? 40 : style === "Soup" || style === "Curry" ? 30 : 25,
     servings: 2,
     ingredients: ingredientList,
-    steps: [prep, cook[style], combine[style], "Taste and season with salt and black pepper before serving."],
+    steps: [prep, ...(style === "Salad" && !saladCook.length ? [] : [cook[style]]), combine[style], "Taste and season with salt and black pepper before serving."],
     whyItFits,
     matchedIngredients: matches
   };
