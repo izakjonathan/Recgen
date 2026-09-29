@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 
-type Recipe = { title: string; description: string; minutes: number; servings: number; ingredients: string[]; steps: string[]; whyItFits: string };
+type Recipe = { id: string; title: string; description: string; minutes: number; servings: number; ingredients: string[]; steps: string[]; whyItFits: string };
 type Style = "Salad" | "Potato" | "Soup" | "Pasta" | "Curry" | "Stew";
 type Weight = "Light" | "Hearty";
 type Theme = { canvas: string; ink: string; accent: string; positive: string };
@@ -34,7 +34,8 @@ export default function RecipeBuilder() {
   const [draftTheme, setDraftTheme] = useState<Theme>(defaultTheme);
   const [studioMessage, setStudioMessage] = useState("");
   const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [recipeSource, setRecipeSource] = useState<"ai" | "built-in" | null>(null);
+  const [catalogueCount, setCatalogueCount] = useState(0);
+  const [seenIds, setSeenIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState<number | null>(0);
@@ -87,20 +88,20 @@ export default function RecipeBuilder() {
   function removeIngredient(name: string) {
     setIngredients(current => current.filter(item => item !== name));
     setSelected(current => current.filter(item => item !== name));
-    setRecipes([]);
+    setRecipes([]); setSeenIds([]);
   }
   function toggleIngredient(name: string) {
     setSelected(current => current.includes(name) ? current.filter(item => item !== name) : [...current, name]);
-    setRecipes([]); setError("");
+    setRecipes([]); setSeenIds([]); setError("");
   }
   async function generate() {
     if (!style || !weight || !selected.length || loading) return;
-    setLoading(true); setError(""); setRecipes([]); setRecipeSource(null);
+    setLoading(true); setError(""); setRecipes([]);
     try {
-      const response = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ style, weight, ingredients: selected }) });
+      const response = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ style, weight, ingredients: selected, seenIds }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not generate recipes.");
-      setRecipes(data.recipes); setRecipeSource(data.source); setExpanded(0);
+      setRecipes(data.recipes); setCatalogueCount(data.count); setSeenIds(current => [...current, ...data.recipes.map((recipe: Recipe) => recipe.id)]); setExpanded(0);
       requestAnimationFrame(() => document.getElementById("ideas")?.scrollIntoView({ behavior: "smooth", block: "start" }));
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not generate recipes."); }
     finally { setLoading(false); }
@@ -119,7 +120,7 @@ export default function RecipeBuilder() {
 
       <section className="flow-section" id="dish" aria-labelledby="dish-heading">
         <div className="section-title"><span className="step-number">01</span><div><span className="eyebrow">THE STARTING POINT</span><h2 id="dish-heading">Choose a dish</h2></div></div>
-        <div className="style-grid">{styles.map(item => <button className="choice-card" data-selected={style === item} type="button" key={item} aria-pressed={style === item} onClick={() => { setStyle(item); setRecipes([]); setError(""); }}><strong>{item}</strong><span aria-hidden="true">{style === item ? "●" : "○"}</span></button>)}</div>
+        <div className="style-grid">{styles.map(item => <button className="choice-card" data-selected={style === item} type="button" key={item} aria-pressed={style === item} onClick={() => { setStyle(item); setRecipes([]); setSeenIds([]); setError(""); }}><strong>{item}</strong><span aria-hidden="true">{style === item ? "●" : "○"}</span></button>)}</div>
       </section>
 
       <section className="flow-section" id="ingredients" aria-labelledby="ingredients-heading">
@@ -130,12 +131,12 @@ export default function RecipeBuilder() {
 
       <section className="flow-section" id="feel" aria-labelledby="feel-heading">
         <div className="section-title"><span className="step-number">03</span><div><span className="eyebrow">THE FINISHING TOUCH</span><h2 id="feel-heading">Keep it light or hearty?</h2></div></div>
-        <div className="weight-grid"><button className="weight-card" data-selected={weight === "Light"} type="button" aria-pressed={weight === "Light"} onClick={() => { setWeight("Light"); setRecipes([]); }}><span><strong>Light</strong><small>Fresh, bright and easy</small></span><span className="selection-circle" /></button><button className="weight-card" data-selected={weight === "Hearty"} type="button" aria-pressed={weight === "Hearty"} onClick={() => { setWeight("Hearty"); setRecipes([]); }}><span><strong>Hearty</strong><small>Rich, filling and cosy</small></span><span className="selection-circle" /></button></div>
+        <div className="weight-grid"><button className="weight-card" data-selected={weight === "Light"} type="button" aria-pressed={weight === "Light"} onClick={() => { setWeight("Light"); setRecipes([]); setSeenIds([]); }}><span><strong>Light</strong><small>Fresh, bright and easy</small></span><span className="selection-circle" /></button><button className="weight-card" data-selected={weight === "Hearty"} type="button" aria-pressed={weight === "Hearty"} onClick={() => { setWeight("Hearty"); setRecipes([]); setSeenIds([]); }}><span><strong>Hearty</strong><small>Rich, filling and cosy</small></span><span className="selection-circle" /></button></div>
       </section>
 
       <section className="action-section"><button className="generate-button" type="button" disabled={!style || !weight || !selected.length || loading} onClick={generate}>{loading ? "Making your menu…" : recipes.length ? "Generate three more" : "Generate three ideas"}<span aria-hidden="true">↗︎</span></button><p>{selected.length ? `${selected.length} ingredient${selected.length === 1 ? "" : "s"} selected` : "Select at least one ingredient to continue"}</p>{error && <p className="error" role="alert">{error}</p>}</section>
 
-      {(recipes.length > 0 || loading) && <section className="results" id="ideas" aria-live="polite"><div className="results-heading"><p className="eyebrow">YOUR MENU</p><h2>Three ways to make it</h2><p>{style} · {weight}</p>{recipeSource === "built-in" && <p>Built-in recipe ideas · AI is unavailable right now</p>}</div>{loading ? <div className="loading-card" role="status">Finding three ideas for you…</div> : <div className="recipe-list">{recipes.map((recipe, index) => <article className="recipe-card" key={`${recipe.title}-${index}`}><div className="recipe-meta"><span>IDEA {String(index + 1).padStart(2, "0")}</span><span>{recipe.minutes} MIN · {recipe.servings} SERVINGS</span></div><h3>{recipe.title}</h3><p className="description">{recipe.description}</p><p className="fit">{recipe.whyItFits}</p><button className="recipe-toggle" type="button" aria-expanded={expanded === index} onClick={() => setExpanded(expanded === index ? null : index)}>{expanded === index ? "Hide recipe" : "View recipe"}<span aria-hidden="true">{expanded === index ? "−" : "+"}</span></button>{expanded === index && <div className="recipe-detail"><h4>Ingredients</h4><ul>{recipe.ingredients.map((ingredient, i) => <li key={i}>{ingredient}</li>)}</ul><h4>Method</h4><ol>{recipe.steps.map((step, i) => <li key={i}>{step}</li>)}</ol></div>}</article>)}</div>}</section>}
+      {(recipes.length > 0 || loading) && <section className="results" id="ideas" aria-live="polite"><div className="results-heading"><p className="eyebrow">YOUR MENU</p><h2>Three ways to make it</h2><p>{style} · {weight}</p><p>{catalogueCount} recipes in the library · no API needed</p></div>{loading ? <div className="loading-card" role="status">Finding three ideas for you…</div> : <div className="recipe-list">{recipes.map((recipe, index) => <article className="recipe-card" key={`${recipe.title}-${index}`}><div className="recipe-meta"><span>IDEA {String(index + 1).padStart(2, "0")}</span><span>{recipe.minutes} MIN · {recipe.servings} SERVINGS</span></div><h3>{recipe.title}</h3><p className="description">{recipe.description}</p><p className="fit">{recipe.whyItFits}</p><button className="recipe-toggle" type="button" aria-expanded={expanded === index} onClick={() => setExpanded(expanded === index ? null : index)}>{expanded === index ? "Hide recipe" : "View recipe"}<span aria-hidden="true">{expanded === index ? "−" : "+"}</span></button>{expanded === index && <div className="recipe-detail"><h4>Ingredients</h4><ul>{recipe.ingredients.map((ingredient, i) => <li key={i}>{ingredient}</li>)}</ul><h4>Method</h4><ol>{recipe.steps.map((step, i) => <li key={i}>{step}</li>)}</ol></div>}</article>)}</div>}</section>}
     </main>
 
     <nav className="bottom-dock" aria-label="Recipe steps"><a href="#dish">Dish</a><a href="#ingredients">Ingredients</a><a href="#feel">Feel</a><a href="#ideas" aria-disabled={!recipes.length}>{recipes.length ? "Ideas" : "Ideas"}</a></nav>
