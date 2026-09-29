@@ -195,6 +195,12 @@ export function recipeFromEntry(entry: (typeof catalogue)[number], selected: str
   const { style, feel, core } = entry;
   const profile = flavours[entry.flavour];
   const hearty = feel === "Hearty";
+  const normalized = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
+  const originalTags = new Set([...core, ...profile.tags].map(normalized));
+  const naturalMatches = selected.filter(name => originalTags.has(normalized(name)));
+  const coveredByBase = style === "Potato" && hearty ? ["White beans"] : [];
+  const extrasSelected = selected.filter(name => ![...core, ...profile.tags, ...coveredByBase].some(key => normalized(key) === normalized(name)));
+  const mainKeys = [...core, ...extrasSelected.map(name => Object.keys(quantity).find(key => normalized(key) === normalized(name)) ?? name)];
   const base: Record<Style, string> = {
     Salad: hearty ? "120 g cooked grains (such as couscous or rice)" : "50 g salad leaves",
     Potato: hearty ? "1 tin white beans, drained" : "50 g salad leaves",
@@ -204,7 +210,7 @@ export function recipeFromEntry(entry: (typeof catalogue)[number], selected: str
     Stew: hearty ? "2 slices crusty bread" : "1 handful fresh herbs"
   };
   const extras = style === "Soup" || style === "Stew" ? ["600 ml vegetable stock"] : [];
-  const main = core.map(key => quantity[key] ?? `150 g ${key.toLowerCase()}`);
+  const main = mainKeys.map(key => quantity[key] ?? `150 g ${key.toLowerCase()}`);
   const sauceIngredients = core.some(key => profile.tags.includes(key))
     ? profile.ingredients.filter(line => !profile.tags.some(tag => core.includes(tag) && line.toLowerCase().includes(tag.toLowerCase())))
     : profile.ingredients;
@@ -228,19 +234,21 @@ export function recipeFromEntry(entry: (typeof catalogue)[number], selected: str
     "White beans": "drain and rinse the canned white beans", Rocket: "wash the rocket",
     "Spring onion": "slice the spring onions", Celery: "slice the celery"
   };
-  const prep = `Prepare the main ingredients: ${core.map(key => prepMap[key] ?? `prepare the ${key.toLowerCase()}`).join("; ")}.`;
-  const longCook = core.filter(key => ["Potato", "Sweet potato", "Pumpkin", "Carrot", "Aubergine", "Broccoli", "Green beans", "Courgette", "Mushrooms", "Red pepper", "Onion", "Celery"].includes(key));
-  const lateCook = core.filter(key => ["Spinach", "Kale", "Peas", "Tofu", "Chickpeas", "Butter beans", "Lentils", "White beans"].includes(key));
+  const prep = `Prepare the main ingredients: ${mainKeys.map(key => prepMap[key] ?? `prepare the ${key.toLowerCase()} according to its package instructions`).join("; ")}.`;
+  const longCook = mainKeys.filter(key => ["Potato", "Sweet potato", "Pumpkin", "Carrot", "Aubergine", "Broccoli", "Green beans", "Courgette", "Mushrooms", "Red pepper", "Onion", "Celery", "Garlic", "Ginger", "Tomato"].includes(key));
+  const lateCook = mainKeys.filter(key => ["Spinach", "Kale", "Peas", "Tofu", "Chickpeas", "Butter beans", "Lentils", "White beans", "Coconut milk"].includes(key));
   const names = (list: string[]) => list.map(name => name.toLowerCase()).join(", ");
   const late = lateCook.length ? ` Add ${names(lateCook)} for the final 3–5 minutes.` : "";
-  const saladCook = core.filter(key => ["Potato", "Sweet potato", "Pumpkin", "Aubergine", "Broccoli", "Green beans", "Courgette", "Mushrooms", "Tofu"].includes(key));
+  const saladCook = mainKeys.filter(key => ["Potato", "Sweet potato", "Pumpkin", "Aubergine", "Broccoli", "Green beans", "Courgette", "Mushrooms", "Tofu"].includes(key));
+  const finishExtras = mainKeys.filter(key => ["Coriander", "Parmesan", "Lemon", "Cucumber", "Feta", "Rocket", "Spring onion"].includes(key) && !core.includes(key));
+  const unknownExtras = extrasSelected.filter(name => !Object.keys(quantity).some(key => normalized(key) === normalized(name)));
   const soften = longCook.length ? `Soften ${names(longCook)} in a little oil for 5 minutes.` : "Warm a little oil in the pan.";
   const cook: Record<Style, string> = {
     Salad: `Cook ${names(saladCook)} until tender and let cool slightly. Keep the other ingredients fresh.`,
     Potato: `Roast ${names(longCook)} with a little oil at 210°C for 25–35 minutes until golden.${late}`,
     Soup: `${soften} Add the vegetable stock and simmer 15–20 minutes until tender.${late}`,
     Pasta: `Boil the pasta in salted water until tender. ${longCook.length ? `Cook ${names(longCook)} in a little oil for 6–10 minutes.` : "Warm a little oil in a pan."}${late} Save a splash of pasta water.`,
-    Curry: `Cook the rice according to the packet. ${soften} Add ${core.includes("Coconut milk") ? "the coconut milk" : "150 ml water"} and simmer 12–18 minutes until tender.${late}`,
+    Curry: `Cook the rice according to the packet. ${soften} Add ${mainKeys.includes("Coconut milk") ? "the coconut milk" : "150 ml water"} and simmer 12–18 minutes until tender.${lateCook.filter(key => key !== "Coconut milk").length ? ` Add ${names(lateCook.filter(key => key !== "Coconut milk"))} for the final 3–5 minutes.` : ""}`,
     Stew: `${soften} Add the stock and simmer 20–25 minutes until tender.${late}`
   };
   const combine: Record<Style, string> = {
@@ -251,20 +259,18 @@ export function recipeFromEntry(entry: (typeof catalogue)[number], selected: str
     Curry: `${profile.sauce} ${profile.finish} Spoon over the cooked rice.`,
     Stew: `${profile.sauce} ${profile.finish} ${hearty ? "Serve with crusty bread." : "Scatter with fresh herbs."}`
   };
-  const normalized = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
-  const tags = new Set([...core, ...profile.tags, ...(style === "Potato" ? ["Potato"] : [])].map(normalized));
-  const matches = selected.filter(name => tags.has(normalized(name)));
-  const whyItFits = matches.length ? `Uses ${matches.length} of your ${selected.length} selected ingredient${selected.length === 1 ? "" : "s"}: ${matches.join(", ")}.` : "No selected ingredients match this recipe; see its ingredient list before cooking.";
+  const addedStep = [finishExtras.length ? `Fold in ${names(finishExtras)} before serving.` : "", unknownExtras.length ? `Cook or otherwise prepare ${names(unknownExtras)} safely according to their package instructions, then add them to the dish.` : ""].filter(Boolean).join(" ");
   return {
     id: entry.id,
-    title: `${entry.title}${hearty ? " · Hearty" : " · Light"}`,
+    title: entry.title,
     description: `${entry.note}. ${profile.name.charAt(0).toUpperCase()}${profile.name.slice(1)} finish.`,
     minutes: style === "Stew" ? 40 : style === "Potato" ? 40 : style === "Soup" || style === "Curry" ? 30 : 25,
     servings: 2,
     ingredients: ingredientList,
-    steps: [prep, ...(style === "Salad" && !saladCook.length ? [] : [cook[style]]), combine[style], "Taste and season with salt and black pepper before serving."],
-    whyItFits,
-    matchedIngredients: matches
+    steps: [prep, ...(style === "Salad" && !saladCook.length ? [] : [cook[style]]), combine[style], ...(addedStep ? [addedStep] : []), "Taste and season with salt and black pepper before serving."],
+    whyItFits: `Uses all ${selected.length} chosen ingredient${selected.length === 1 ? "" : "s"}.`,
+    matchedIngredients: selected,
+    naturalMatchCount: naturalMatches.length
   };
 }
 
@@ -274,7 +280,7 @@ export function pickRecipes(style: Style, feel: Feel, selected: string[], seen: 
   const pool = unseen.length >= 3 ? unseen : candidates;
   const ranked = pool.map(entry => {
     const recipe = recipeFromEntry(entry, selected);
-    const score = recipe.matchedIngredients.length * 10 - (entry.core.length - recipe.matchedIngredients.length) + (Math.random() * 0.5);
+    const score = recipe.naturalMatchCount * 10 - (entry.core.length - recipe.naturalMatchCount) + (Math.random() * 0.5);
     return { entry, recipe, score };
   }).sort((a, b) => b.score - a.score);
   const chosen: typeof ranked = [];
