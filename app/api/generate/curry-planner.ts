@@ -67,7 +67,7 @@ function build(options: Options, selected: Ingredient[], mode: Mode, variant: nu
   if (mode === "roasted") {
     step("cook", [oil, ...roastable.map(x => x.id)], `Heat the oven to 210°C. Spread ${named(roastable)} on a roomy tray with the oil. Roast for ${root.length ? "25–30" : "18–22"} minutes, turning halfway, until tender and browned.`, root.length ? 30 : 22, "oven", "cooked");
   }
-  if (aromaticBase.length) step("cook", [panOil, ...aromaticBase.map(x => x.id)], `Soften ${named(aromaticBase)} in the oil for 5–6 minutes.`, 6, "hob", "in-dish");
+  if (aromaticBase.length) step("cook", [panOil, ...aromaticBase.map(x => x.id)], `${mode === "roasted" ? "While the tray roasts, soften" : "Soften"} ${named(aromaticBase)} in the oil for 5–6 minutes.`, 6, "hob", "in-dish");
   if (aromaticLate.length) step("cook", [panOil, ...aromaticLate.map(x => x.id)], `Add ${named(aromaticLate)} and stir for 1 minute.`, 1, "hob", "in-dish");
   step("cook", [panOil, spice, ...(chili ? [chili] : []), ...(finish === "finish-paprika" ? [finish] : [])], `Stir in ${variant % 3 === 0 ? "the curry powder" : variant % 3 === 1 ? "the cumin and turmeric" : "the garam masala and ground coriander"} ${chili ? "and chilli flakes " : ""}${finish === "finish-paprika" ? "and smoked paprika " : ""}with the oil for 30 seconds so the spices become fragrant.`, 1, "hob", "in-dish");
   if (mode === "dry") {
@@ -117,7 +117,8 @@ function validate(plan: CurryPlan, selected: Ingredient[], limit: number) {
   const prepared = new Set(plan.steps.filter(s => s.kind === "prep").flatMap(s => s.ingredientIds));
   const used = new Set(plan.steps.filter(s => s.kind !== "prep").flatMap(s => s.ingredientIds));
   if (plan.lines.some(x => !used.has(x.id) || plan.states.get(x.id) !== "in-dish")) return false;
-  if (selected.some(x => !listed.has(x.id) || !prepared.has(x.id) || !used.has(x.id))) return false;
+  const methodText = plan.steps.filter(s => s.kind !== "prep").map(s => s.text.toLocaleLowerCase()).join(" ");
+  if (selected.some(x => !listed.has(x.id) || !prepared.has(x.id) || !used.has(x.id) || !methodText.includes(x.label.toLocaleLowerCase()))) return false;
   if (plan.steps.some(s => s.ingredientIds.some(id => !listed.has(id)) || s.from.some((state, index) => state === "raw" && s.kind !== "prep" && selected.some(i => i.id === s.ingredientIds[index])))) return false;
   return true;
 }
