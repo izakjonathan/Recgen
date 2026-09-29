@@ -5,6 +5,10 @@ import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
 type Recipe = { id: string; title: string; description: string; minutes: number; servings: number; ingredients: string[]; steps: string[]; whyItFits: string };
 type Style = "Salad" | "Potato" | "Soup" | "Pasta" | "Curry" | "Stew";
 type Weight = "Light" | "Hearty";
+type Flavour = "Surprise me" | "Herby" | "Citrus" | "Smoky" | "Spiced" | "Creamy" | "Umami";
+type Texture = "Surprise me" | "Fresh" | "Tender" | "Crisp";
+type Pace = "Any time" | "About 30 min" | "About 45 min";
+type Heat = "Mild" | "Medium" | "Hot";
 type Theme = { canvas: string; ink: string; accent: string; positive: string };
 const defaultTheme: Theme = { canvas: "#fff4c4", ink: "#000000", accent: "#bb533f", positive: "#78a353" };
 const styles: Style[] = ["Salad", "Potato", "Soup", "Pasta", "Curry", "Stew"];
@@ -34,8 +38,12 @@ export default function RecipeBuilder() {
   const [draftTheme, setDraftTheme] = useState<Theme>(defaultTheme);
   const [studioMessage, setStudioMessage] = useState("");
   const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [catalogueCount, setCatalogueCount] = useState(0);
-  const [seenIds, setSeenIds] = useState<string[]>([]);
+  const [flavour, setFlavour] = useState<Flavour>("Surprise me");
+  const [texture, setTexture] = useState<Texture>("Surprise me");
+  const [pace, setPace] = useState<Pace>("Any time");
+  const [heat, setHeat] = useState<Heat>("Mild");
+  const [servings, setServings] = useState(2);
+  const [round, setRound] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState<number | null>(0);
@@ -88,20 +96,20 @@ export default function RecipeBuilder() {
   function removeIngredient(name: string) {
     setIngredients(current => current.filter(item => item !== name));
     setSelected(current => current.filter(item => item !== name));
-    setRecipes([]); setSeenIds([]);
+    setRecipes([]); setRound(0);
   }
   function toggleIngredient(name: string) {
     setSelected(current => current.includes(name) ? current.filter(item => item !== name) : [...current, name]);
-    setRecipes([]); setSeenIds([]); setError("");
+    setRecipes([]); setRound(0); setError("");
   }
   async function generate() {
     if (!style || !weight || !selected.length || loading) return;
     setLoading(true); setError(""); setRecipes([]);
     try {
-      const response = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ style, weight, ingredients: selected, seenIds }) });
+      const response = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ style, weight, ingredients: selected, flavour, texture, pace, heat, servings, round }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not generate recipes.");
-      setRecipes(data.recipes); setCatalogueCount(data.count); setSeenIds(current => [...current, ...data.recipes.map((recipe: Recipe) => recipe.id)]); setExpanded(0);
+      setRecipes(data.recipes); setRound(current => current + 1); setExpanded(0);
       requestAnimationFrame(() => document.getElementById("ideas")?.scrollIntoView({ behavior: "smooth", block: "start" }));
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not generate recipes."); }
     finally { setLoading(false); }
@@ -117,7 +125,7 @@ export default function RecipeBuilder() {
 
     <main className="app-main">
       <section className="flow-section" id="dish" aria-label="Choose a dish">
-        <div className="style-grid">{styles.map(item => <button className="choice-card" data-selected={style === item} type="button" key={item} aria-pressed={style === item} onClick={() => { setStyle(item); setRecipes([]); setSeenIds([]); setError(""); }}><strong>{item}</strong><span aria-hidden="true">{style === item ? "●" : "○"}</span></button>)}</div>
+        <div className="style-grid">{styles.map(item => <button className="choice-card" data-selected={style === item} type="button" key={item} aria-pressed={style === item} onClick={() => { setStyle(item); setRecipes([]); setRound(0); setError(""); }}><strong>{item}</strong><span aria-hidden="true">{style === item ? "●" : "○"}</span></button>)}</div>
       </section>
 
       <section className="flow-section" id="ingredients" aria-label="Pick ingredients">
@@ -126,12 +134,22 @@ export default function RecipeBuilder() {
       </section>
 
       <section className="flow-section" id="feel" aria-label="Choose light or hearty">
-        <div className="weight-grid"><button className="weight-card" data-selected={weight === "Light"} type="button" aria-pressed={weight === "Light"} onClick={() => { setWeight("Light"); setRecipes([]); setSeenIds([]); }}><span><strong>Light</strong><small>Fresh, bright and easy</small></span><span className="selection-circle" /></button><button className="weight-card" data-selected={weight === "Hearty"} type="button" aria-pressed={weight === "Hearty"} onClick={() => { setWeight("Hearty"); setRecipes([]); setSeenIds([]); }}><span><strong>Hearty</strong><small>Rich, filling and cosy</small></span><span className="selection-circle" /></button></div>
+        <div className="weight-grid"><button className="weight-card" data-selected={weight === "Light"} type="button" aria-pressed={weight === "Light"} onClick={() => { setWeight("Light"); setRecipes([]); setRound(0); }}><span><strong>Light</strong><small>Fresh, bright and easy</small></span><span className="selection-circle" /></button><button className="weight-card" data-selected={weight === "Hearty"} type="button" aria-pressed={weight === "Hearty"} onClick={() => { setWeight("Hearty"); setRecipes([]); setRound(0); }}><span><strong>Hearty</strong><small>Rich, filling and cosy</small></span><span className="selection-circle" /></button></div>
+      </section>
+
+      <section className="preferences-section" aria-label="Recipe preferences">
+        <div className="preferences-grid">
+          <label>Flavour<select value={flavour} onChange={event => { setFlavour(event.target.value as Flavour); setRecipes([]); setRound(0); }}>{["Surprise me", "Herby", "Citrus", "Smoky", "Spiced", "Creamy", "Umami"].map(value => <option key={value}>{value}</option>)}</select></label>
+          <label>Texture<select value={texture} onChange={event => { setTexture(event.target.value as Texture); setRecipes([]); setRound(0); }}>{["Surprise me", "Fresh", "Tender", "Crisp"].map(value => <option key={value}>{value}</option>)}</select></label>
+          <label>Time<select value={pace} onChange={event => { setPace(event.target.value as Pace); setRecipes([]); setRound(0); }}>{["Any time", "About 30 min", "About 45 min"].map(value => <option key={value}>{value}</option>)}</select></label>
+          <label>Heat<select value={heat} onChange={event => { setHeat(event.target.value as Heat); setRecipes([]); setRound(0); }}>{["Mild", "Medium", "Hot"].map(value => <option key={value}>{value}</option>)}</select></label>
+          <label>Servings<select value={servings} onChange={event => { setServings(Number(event.target.value)); setRecipes([]); setRound(0); }}>{[2, 4, 6].map(value => <option key={value}>{value}</option>)}</select></label>
+        </div>
       </section>
 
       <section className="action-section"><button className="generate-button" type="button" disabled={!style || !weight || !selected.length || loading} onClick={generate}>{loading ? "Making your menu…" : recipes.length ? "Generate three more" : "Generate three ideas"}<span aria-hidden="true">↗︎</span></button><p>{selected.length ? `${selected.length} ingredient${selected.length === 1 ? "" : "s"} selected` : "Select at least one ingredient to continue"}</p>{error && <p className="error" role="alert">{error}</p>}</section>
 
-      {(recipes.length > 0 || loading) && <section className="results" id="ideas" aria-live="polite"><div className="results-heading"><h1>{style} · {weight}</h1><p className="selected-subheading">{selected.join(" · ")}</p>{catalogueCount > 0 && <p className="catalogue-count">{catalogueCount} recipes in the library</p>}</div>{loading ? <div className="loading-card" role="status">Finding three ideas for you…</div> : <div className="recipe-list">{recipes.map((recipe, index) => <article className="recipe-card" key={`${recipe.title}-${index}`}><div className="recipe-meta"><span>IDEA {String(index + 1).padStart(2, "0")}</span><span>{recipe.minutes} MIN · {recipe.servings} SERVINGS</span></div><h3>{recipe.title}</h3><p className="description">{recipe.description}</p><p className="fit">{recipe.whyItFits}</p><button className="recipe-toggle" type="button" aria-expanded={expanded === index} onClick={() => setExpanded(expanded === index ? null : index)}>{expanded === index ? "Hide recipe" : "View recipe"}<span aria-hidden="true">{expanded === index ? "−" : "+"}</span></button>{expanded === index && <div className="recipe-detail"><h4>Ingredients</h4><ul>{recipe.ingredients.map((ingredient, i) => <li key={i}>{ingredient}</li>)}</ul><h4>Method</h4><ol>{recipe.steps.map((step, i) => <li key={i}>{step}</li>)}</ol></div>}</article>)}</div>}</section>}
+      {(recipes.length > 0 || loading) && <section className="results" id="ideas" aria-live="polite"><div className="results-heading"><h1>{style} · {weight}</h1><p className="selected-subheading">{selected.join(" · ")}</p><p className="catalogue-count">Generated for your choices · {flavour} flavour · {texture} texture · {pace} · {heat} heat · {servings} servings</p></div>{loading ? <div className="loading-card" role="status">Creating three recipes for you…</div> : <div className="recipe-list">{recipes.map((recipe, index) => <article className="recipe-card" key={`${recipe.title}-${index}`}><div className="recipe-meta"><span>IDEA {String(index + 1).padStart(2, "0")}</span><span>{recipe.minutes} MIN · {recipe.servings} SERVINGS</span></div><h3>{recipe.title}</h3><p className="description">{recipe.description}</p><p className="fit">{recipe.whyItFits}</p><button className="recipe-toggle" type="button" aria-expanded={expanded === index} onClick={() => setExpanded(expanded === index ? null : index)}>{expanded === index ? "Hide recipe" : "View recipe"}<span aria-hidden="true">{expanded === index ? "−" : "+"}</span></button>{expanded === index && <div className="recipe-detail"><h4>Ingredients</h4><ul>{recipe.ingredients.map((ingredient, i) => <li key={i}>{ingredient}</li>)}</ul><h4>Method</h4><ol>{recipe.steps.map((step, i) => <li key={i}>{step}</li>)}</ol></div>}</article>)}</div>}</section>}
     </main>
 
     <nav className="bottom-dock" aria-label="Recipe steps"><a href="#dish">Dish</a><a href="#ingredients">Ingredients</a><a href="#feel">Feel</a><a href="#ideas" aria-disabled={!recipes.length}>{recipes.length ? "Ideas" : "Ideas"}</a></nav>
