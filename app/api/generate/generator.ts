@@ -136,7 +136,11 @@ function makeRecipe(options: Options, variant: number) {
   if (style === "Salad" && weight === "Hearty") steps.push("Cook the couscous according to its packet instructions, then fluff it with a fork.");
   const roasted = choice.texture === "Crisp";
   if (roasted && (firm.length || quick.length || proteins.length)) {
-    steps.push(`Heat the oven to 210°C. Toss ${list([...firm, ...quick, ...proteins])} with olive oil and a pinch of salt. Roast on a tray for ${firm.length ? "25–35" : "15–20"} minutes until cooked through and browned, turning halfway. Make sure tofu and any custom ingredients are cooked safely.`);
+    steps.push(`Heat the oven to 210°C. Toss ${list([...firm, ...quick, ...proteins])} with olive oil and a pinch of salt. Roast on a tray for ${firm.length ? "25–35" : "15–20"} minutes until cooked through and browned, turning halfway.${proteins.includes("firm tofu") ? " Cook the tofu thoroughly." : ""}`);
+    if (aromatics.length) steps.push(`Meanwhile, soften ${list(aromatics)} in a little olive oil in a large pan for 2–3 minutes.`);
+    if (style === "Soup" || style === "Stew") steps.push(`Add the roasted ingredients to a pot with the vegetable stock. Simmer for 5–10 minutes, until all firm vegetables are tender.`);
+    if (style === "Curry") steps.push(`Add the roasted ingredients to the pan with ${liquid.length ? list(liquid) : "the stock or water"}. Simmer for 5 minutes to bring the curry together.`);
+    if (style === "Pasta" || style === "Potato") steps.push(`Fold the roasted ingredients${aromatics.length ? " through the softened aromatics" : " together"}.`);
   } else if (style === "Salad") {
     if (firm.length || proteins.includes("firm tofu")) steps.push(`Cook ${list([...firm, ...proteins.filter(p => p === "firm tofu")])} in a pan with a little oil until tender and fully cooked; cool slightly.`);
     if (quick.length) steps.push(choice.texture === "Fresh" ? `Leave ${list(quick)} fresh and chopped for crunch.` : `Briefly sauté ${list(quick)} in a little oil until tender.`);
