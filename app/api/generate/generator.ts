@@ -1,170 +1,183 @@
-export type Style = "Salad" | "Potato" | "Soup" | "Pasta" | "Curry" | "Stew";
-export type Feel = "Light" | "Hearty";
-export type Flavour = "Surprise me" | "Herby" | "Citrus" | "Smoky" | "Spiced" | "Creamy" | "Umami";
-export type Texture = "Surprise me" | "Fresh" | "Tender" | "Crisp";
-export type Pace = "Any time" | "About 30 min" | "About 45 min";
-export type Heat = "Mild" | "Medium" | "Hot";
-export type Options = { style: Style; weight: Feel; ingredients: string[]; flavour: Flavour; texture: Texture; pace: Pace; heat: Heat; servings: number; round: number };
+import { catalogue, formatIngredient, normalize, resolveIngredients, type CustomKind, type Ingredient } from "../../ingredient-catalogue";
+import { blueprints, names, type Action, type Feel, type Flavour, type Heat, type IngredientLine, type Pace, type Plan, type Style, type Technique, type Texture } from "./blueprints";
+import { validatePlan, validateSelection, validateSet } from "./validation";
+export type { Feel, Flavour, Heat, Pace, Style, Texture } from "./blueprints";
+export type Options = { style: Style; weight: Feel; ingredients: string[]; customKinds: Record<string, CustomKind>; flavour: Flavour; texture: Texture; pace: Pace; heat: Heat; servings: number; round: number };
 
-type Role = "firm" | "quick" | "protein" | "leaf" | "aromatic" | "finish" | "liquid";
-type Ingredient = { amount: string; role: Role; prep: string; name: string };
-const known: Record<string, Ingredient> = {
-  potato: { amount: "400 g", role: "firm", prep: "dice the potatoes into 2 cm pieces", name: "potatoes" },
-  tomato: { amount: "2", role: "quick", prep: "chop the tomatoes", name: "tomatoes" },
-  onion: { amount: "1", role: "aromatic", prep: "slice the onion", name: "onion" },
-  garlic: { amount: "2", role: "aromatic", prep: "mince the garlic cloves", name: "garlic cloves" },
-  courgette: { amount: "1", role: "quick", prep: "dice the courgette", name: "courgette" },
-  carrot: { amount: "2", role: "firm", prep: "thinly slice the carrots", name: "carrots" },
-  spinach: { amount: "100 g", role: "leaf", prep: "wash the spinach", name: "spinach" },
-  "butter beans": { amount: "1 tin", role: "protein", prep: "drain and rinse the butter beans", name: "butter beans" },
-  chickpeas: { amount: "1 tin", role: "protein", prep: "drain and rinse the chickpeas", name: "chickpeas" },
-  lentils: { amount: "1 tin cooked", role: "protein", prep: "drain the cooked lentils", name: "lentils" },
-  tofu: { amount: "200 g", role: "protein", prep: "pat dry and cube the tofu", name: "firm tofu" },
-  coriander: { amount: "1 handful", role: "finish", prep: "chop the coriander", name: "coriander" },
-  ginger: { amount: "1 tbsp", role: "aromatic", prep: "grate the ginger", name: "fresh ginger" },
-  "coconut milk": { amount: "200 ml", role: "liquid", prep: "shake the coconut milk", name: "coconut milk" },
-  parmesan: { amount: "35 g", role: "finish", prep: "grate the Parmesan", name: "Parmesan" },
-  lemon: { amount: "1", role: "finish", prep: "zest and juice the lemon", name: "lemon" },
-  cucumber: { amount: "½", role: "finish", prep: "dice the cucumber", name: "cucumber" },
-  feta: { amount: "80 g", role: "finish", prep: "crumble the feta", name: "feta" },
-  peas: { amount: "150 g", role: "quick", prep: "measure the peas", name: "peas" },
-  mushrooms: { amount: "200 g", role: "quick", prep: "slice the mushrooms", name: "mushrooms" },
-  aubergine: { amount: "1", role: "firm", prep: "dice the aubergine small", name: "aubergine" },
-  broccoli: { amount: "½ head", role: "firm", prep: "cut the broccoli into small florets", name: "broccoli" },
-  "sweet potato": { amount: "1", role: "firm", prep: "peel and dice the sweet potato", name: "sweet potato" },
-  kale: { amount: "100 g", role: "leaf", prep: "strip and chop the kale", name: "kale" },
-  "red pepper": { amount: "1", role: "quick", prep: "slice the red pepper", name: "red pepper" },
-  "green beans": { amount: "150 g", role: "firm", prep: "trim and halve the green beans", name: "green beans" },
-  pumpkin: { amount: "300 g", role: "firm", prep: "peel and dice the pumpkin", name: "pumpkin" },
-  "white beans": { amount: "1 tin", role: "protein", prep: "drain and rinse the white beans", name: "white beans" },
-  rocket: { amount: "50 g", role: "finish", prep: "wash the rocket", name: "rocket" },
-  "spring onion": { amount: "3", role: "finish", prep: "slice the spring onions", name: "spring onions" },
-  celery: { amount: "2 sticks", role: "aromatic", prep: "slice the celery", name: "celery" },
+type FlavorDetail = { name: Exclude<Flavour, "Surprise me">; key: string; line: string; use: string; selectedId?: string };
+const flavors: Record<Exclude<Flavour, "Surprise me">, Omit<FlavorDetail, "name">[]> = {
+  Herby: [
+    { key: "herbs", line: "1 tsp dried mixed herbs", use: "Stir the mixed herbs through the warm dish." },
+    { key: "oregano", line: "1 tsp dried oregano", use: "Rub the oregano between your fingers and stir it through." },
+    { key: "dill", line: "1 tbsp chopped dill", use: "Scatter the dill over the dish just before serving." }
+  ],
+  Citrus: [
+    { key: "lemon", line: "1 lemon", use: "Add the lemon juice and zest off the heat.", selectedId: "lemon" },
+    { key: "lime", line: "1 lime", use: "Squeeze the lime over the dish just before serving." },
+    { key: "lemon", line: "1 lemon", use: "Zest the lemon over the dish, then add its juice off the heat.", selectedId: "lemon" }
+  ],
+  Smoky: [
+    { key: "paprika", line: "1 tsp smoked paprika", use: "Warm the smoked paprika briefly in a spoonful of oil, then stir it through." },
+    { key: "paprika-cumin", line: "1 tsp smoked paprika and ½ tsp ground cumin", use: "Warm the smoked paprika and cumin briefly in oil, then fold them through." },
+    { key: "paprika-tomato", line: "1 tsp smoked paprika and 1 tsp tomato paste", use: "Cook the smoked paprika and tomato paste in oil for one minute, then stir them through." }
+  ],
+  Spiced: [
+    { key: "curry-powder", line: "1 tbsp curry powder", use: "Bloom the curry powder in oil for 30 seconds and stir it into the dish." },
+    { key: "cumin-turmeric", line: "1 tsp cumin and ½ tsp turmeric", use: "Warm the cumin and turmeric in oil for 30 seconds and fold through." },
+    { key: "garam-masala", line: "1 tsp garam masala", use: "Stir the garam masala through the warm dish." }
+  ],
+  Creamy: [
+    { key: "yogurt", line: "100 g plain yogurt", use: "Turn off the heat and swirl in the yogurt without boiling it." },
+    { key: "oat-cream", line: "100 ml oat cream", use: "Stir in the oat cream and warm gently." },
+    { key: "creme-fraiche", line: "100 g crème fraîche", use: "Take the pan off the heat and fold in the crème fraîche." }
+  ],
+  Umami: [
+    { key: "miso", line: "1 tsp white miso", use: "Dissolve the miso in a spoonful of warm water and stir it in off the heat." },
+    { key: "soy", line: "1 tbsp soy sauce", use: "Stir in the soy sauce, then taste before adding salt." },
+    { key: "mushroom", line: "1 tsp mushroom seasoning", use: "Stir in the mushroom seasoning and taste before adding salt." }
+  ]
 };
-const profiles: Record<Exclude<Flavour, "Surprise me">, { extras: string[]; sauce: string; finish: string }> = {
-  Herby: { extras: ["1 tsp dried mixed herbs"], sauce: "Stir through the herbs and warm for one minute.", finish: "Finish with another pinch of herbs." },
-  Citrus: { extras: ["1 tbsp lemon juice"], sauce: "Add lemon juice off the heat for a bright finish.", finish: "Taste for acidity before serving." },
-  Smoky: { extras: ["1 tsp smoked paprika"], sauce: "Warm the smoked paprika in a spoonful of oil for 30 seconds, then fold it through.", finish: "Finish with a pinch of smoked paprika." },
-  Spiced: { extras: ["1 tsp ground cumin", "½ tsp ground turmeric"], sauce: "Warm the cumin and turmeric in a spoonful of oil for 30 seconds, then fold the spices through.", finish: "Taste the spices and adjust the seasoning." },
-  Creamy: { extras: ["2 tbsp plain yogurt or plant-based yogurt"], sauce: "Take off the heat and swirl through the yogurt; do not boil it.", finish: "Add a little yogurt on top." },
-  Umami: { extras: ["1 tsp white miso"], sauce: "Dissolve the miso in a spoonful of warm water and stir it through off the heat.", finish: "Taste before adding more salt." }
-};
-const flavourNames = Object.keys(profiles) as Exclude<Flavour, "Surprise me">[];
-const accents = [
-  { name: "parsley", ingredient: "1 tbsp chopped parsley", step: "Scatter parsley over the finished dish." },
-  { name: "lemon zest", ingredient: "1 tsp lemon zest", step: "Add lemon zest just before serving." },
-  { name: "toasted cumin", ingredient: "½ tsp ground cumin", step: "Toast the cumin briefly in a dry pan, then scatter it over the dish." },
-  { name: "oregano", ingredient: "1 tsp dried oregano", step: "Rub the oregano between your fingers and sprinkle it over the dish." },
-  { name: "lime", ingredient: "½ lime", step: "Squeeze the lime over the finished dish." },
-  { name: "dill", ingredient: "1 tbsp chopped dill", step: "Scatter dill over the finished dish." },
-  { name: "basil", ingredient: "1 handful basil leaves", step: "Tear the basil over the dish just before serving." },
-  { name: "black pepper", ingredient: "½ tsp cracked black pepper", step: "Add a final crack of black pepper." },
-  { name: "chives", ingredient: "1 tbsp chopped chives", step: "Scatter chives over the finished dish." }
-];
-const techniques: Record<Style, { name: string; texture: Exclude<Texture, "Surprise me">; minutes: number }[]> = {
-  Salad: [{ name: "chopped bowl", texture: "Fresh", minutes: 25 }, { name: "warm salad", texture: "Tender", minutes: 30 }, { name: "charred salad", texture: "Crisp", minutes: 35 }],
-  Potato: [{ name: "skillet", texture: "Tender", minutes: 30 }, { name: "crisp tray", texture: "Crisp", minutes: 40 }, { name: "bowl", texture: "Fresh", minutes: 30 }],
-  Soup: [{ name: "chunky soup", texture: "Tender", minutes: 30 }, { name: "blended soup", texture: "Tender", minutes: 35 }, { name: "bright broth", texture: "Fresh", minutes: 30 }],
-  Pasta: [{ name: "saucy pasta", texture: "Tender", minutes: 25 }, { name: "crisp-topped pasta", texture: "Crisp", minutes: 35 }, { name: "fresh pasta bowl", texture: "Fresh", minutes: 25 }],
-  Curry: [{ name: "saucy curry", texture: "Tender", minutes: 30 }, { name: "roasted vegetable curry", texture: "Crisp", minutes: 40 }, { name: "bright curry bowl", texture: "Fresh", minutes: 30 }],
-  Stew: [{ name: "rustic stew", texture: "Tender", minutes: 40 }, { name: "roasted vegetable stew", texture: "Crisp", minutes: 45 }, { name: "brothy stew", texture: "Fresh", minutes: 35 }]
-};
-const key = (value: string) => value.trim().toLocaleLowerCase().replace(/\s+/g, " ");
-const list = (names: string[]) => names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
-const hash = (value: string) => { let n = 2166136261; for (const character of value) n = Math.imul(n ^ character.charCodeAt(0), 16777619); return n >>> 0; };
-const scale = (amount: string, servings: number) => {
-  if (amount.startsWith("½")) {
-    const value = servings / 4;
-    return `${Number.isInteger(value) ? value : `${Math.floor(value) || ""}½`}${amount.slice(1)}`;
-  }
-  if (amount.startsWith("¼")) {
-    const value = servings / 8;
-    return `${value === .25 ? "¼" : value === .5 ? "½" : value === .75 ? "¾" : value}${amount.slice(1)}`;
-  }
-  const match = amount.match(/^(\d+(?:\.\d+)?)\b/);
-  if (!match) return amount; // Keep sensible fractional units (½ cucumber, etc.) as written.
-  const value = Number(match[1]) * servings / 2;
-  return `${Number.isInteger(value) ? value : Number(value.toFixed(1))}${amount.slice(match[1].length)}`;
-};
+const flavourNames = Object.keys(flavors) as Exclude<Flavour, "Surprise me">[];
+const scaleLine = (line: string, servings: number) => line.replace(/(^| and )(\d+(?:\.\d+)?|½|¼)(?=\s)/g, (_, prefix: string, amount: string) => {
+  const value = (amount === "½" ? .5 : amount === "¼" ? .25 : Number(amount)) * servings / 2;
+  const whole = Math.floor(value), fraction = Math.round((value - whole) * 4);
+  return `${prefix}${whole || !fraction ? whole : ""}${["", "¼", "½", "¾"][fraction]}`;
+});
+const hash = (value: string) => { let n = 2166136261; for (const ch of value) n = Math.imul(n ^ ch.charCodeAt(0), 16777619); return n >>> 0; };
+const group = (items: Ingredient[], roles: Ingredient["role"][]) => items.filter(item => roles.includes(item.role));
 
-type Item = Ingredient & { label: string; custom: boolean };
-function makeRecipe(options: Options, variant: number) {
-  const { style, weight, ingredients: selected, pace, heat, servings } = options;
-  const seed = hash(`${style}|${weight}|${selected.map(key).join("|")}|${options.round}`);
-  const items: Item[] = [...new Map(selected.map(label => {
-    const normalized = key(label);
-    return [normalized, { ...(known[normalized] ?? { amount: "150 g", role: "quick", prep: `prepare ${label} safely according to its package instructions`, name: label }), label, custom: !known[normalized] } as Item];
-  })).values()];
-  const matching = techniques[style].filter(t => options.texture === "Surprise me" || t.texture === options.texture);
-  const timeLimit = pace === "About 30 min" ? 30 : pace === "About 45 min" ? 45 : Infinity;
-  const timely = matching.filter(t => t.minutes <= timeLimit);
-  const choice = (timely.length ? timely : matching)[(options.round * 3 + variant) % (timely.length || matching.length)];
-  const profileName = options.flavour === "Surprise me" ? flavourNames[(seed + variant) % flavourNames.length] : options.flavour;
-  const profile = profiles[profileName];
-  const accent = accents[(options.round * 3 + variant) % accents.length];
-  const order = [...items].filter(item => item.role !== "liquid" && item.role !== "finish");
-  const lead = order.length ? order[(options.round + variant) % order.length] : items[(options.round + variant) % items.length];
-  const second = order.filter(item => item !== lead)[(options.round + variant) % Math.max(1, order.length - 1)];
-  const title = `${profileName} ${lead.label.toLowerCase()}${second ? ` and ${second.label.toLowerCase()}` : ""} ${choice.name} with ${accent.name}`;
-  const grouped = (roles: Role[]) => items.filter(item => roles.includes(item.role)).map(item => item.name.toLowerCase());
-  const potatoAnchor = style === "Potato" && !items.some(item => ["potato", "sweet potato"].includes(key(item.label))) ? ["potatoes"] : [];
-  const aromatics = grouped(["aromatic"]), firm = [...potatoAnchor, ...grouped(["firm"])], quick = grouped(["quick"]), proteins = grouped(["protein"]), leaves = grouped(["leaf"]), finish = grouped(["finish"]), liquid = grouped(["liquid"]);
-  const base: Record<Style, string> = {
-    Salad: weight === "Hearty" ? `${scale("120 g", servings)} dry couscous` : `${scale("50 g", servings)} salad leaves`,
-    Potato: weight === "Hearty" ? `${scale("1 tin", servings)} cooked white beans, drained` : `${scale("50 g", servings)} salad leaves`,
-    Soup: weight === "Hearty" ? `${servings} slices crusty bread` : "fresh herbs, to finish",
-    Pasta: `${scale(weight === "Hearty" ? "220 g" : "160 g", servings)} dried pasta`,
-    Curry: `${scale(weight === "Hearty" ? "150 g" : "100 g", servings)} dry rice`,
-    Stew: weight === "Hearty" ? `${servings} slices crusty bread` : "fresh herbs, to finish"
-  };
-  const pantry = style === "Soup" || style === "Stew" ? [`${scale("600 ml", servings)} vegetable stock`] : style === "Curry" ? [liquid.length ? "150 ml water, as needed" : `${scale("250 ml", servings)} vegetable stock or water`] : [];
-  const selectedLines = items.map(item => {
-    const amount = scale(item.amount, servings);
-    const multiple = Number(amount.match(/^\d+(?:\.\d+)?/)?.[0] ?? 0) > 1 && item.amount.startsWith("1");
-    const unit = multiple ? amount.replace(/\btin\b/, "tins") : amount;
-    const name = multiple && ["onion", "courgette", "aubergine", "lemon", "red pepper", "sweet potato", "cucumber"].includes(key(item.name)) ? `${item.name}s` : item.name;
-    return `${unit} ${name}`;
-  });
-  if (style === "Potato" && !items.some(item => ["potato", "sweet potato"].includes(key(item.label)))) selectedLines.unshift(`${scale("400 g", servings)} potatoes`);
-  const extraLines = profile.extras.filter(extra => !items.some(item => key(extra).includes(key(item.label)))).map(extra => scale(extra, servings));
-  const chilli = heat === "Mild" ? [] : [scale(heat === "Hot" ? "1 tsp chilli flakes" : "¼ tsp chilli flakes", servings)];
-  const allLines = [...selectedLines, base[style], ...pantry, ...extraLines, scale(accent.ingredient, servings), ...chilli, `${scale("1 tbsp", servings)} olive oil`, "Salt and black pepper, to taste"];
-  const prep = `Prepare the chosen ingredients: ${list(items.map(item => item.prep))}${style === "Potato" && !items.some(item => ["potato", "sweet potato"].includes(key(item.label))) ? "; dice the added potatoes into 2 cm pieces" : ""}.`;
-  const steps = [prep];
-  if (style === "Pasta") steps.push("Cook the pasta in salted water until just tender, reserving a mug of pasta water before draining.");
-  if (style === "Curry") steps.push("Cook the rice according to its packet instructions.");
-  if (style === "Salad" && weight === "Hearty") steps.push("Cook the couscous according to its packet instructions, then fluff it with a fork.");
-  const roasted = choice.texture === "Crisp";
-  if (roasted && (firm.length || quick.length || proteins.length)) {
-    steps.push(`Heat the oven to 210°C. Toss ${list([...firm, ...quick, ...proteins])} with olive oil and a pinch of salt. Roast on a tray for ${firm.length ? "25–35" : "15–20"} minutes until cooked through and browned, turning halfway.${proteins.includes("firm tofu") ? " Cook the tofu thoroughly." : ""}`);
-    if (aromatics.length) steps.push(`Meanwhile, soften ${list(aromatics)} in a little olive oil in a large pan for 2–3 minutes.`);
-    if (style === "Soup" || style === "Stew") steps.push(`Add the roasted ingredients to a pot with the vegetable stock. Simmer for 5–10 minutes, until all firm vegetables are tender.`);
-    if (style === "Curry") steps.push(`Add the roasted ingredients to the pan with ${liquid.length ? list(liquid) : "the stock or water"}. Simmer for 5 minutes to bring the curry together.`);
-    if (style === "Pasta" || style === "Potato") steps.push(`Fold the roasted ingredients${aromatics.length ? " through the softened aromatics" : " together"}.`);
-  } else if (style === "Salad") {
-    if (firm.length || proteins.includes("firm tofu")) steps.push(`Cook ${list([...firm, ...proteins.filter(p => p === "firm tofu")])} in a pan with a little oil until tender and fully cooked; cool slightly.`);
-    if (quick.length) steps.push(choice.texture === "Fresh" ? `Leave ${list(quick)} fresh and chopped for crunch.` : `Briefly sauté ${list(quick)} in a little oil until tender.`);
+function makePlan(options: Options, selected: Ingredient[], technique: Technique, index: number): Plan {
+  const { style, weight, servings } = options;
+  const lines: IngredientLine[] = [];
+  const actions: Action[] = [];
+  const add = (id: string, text: string) => { if (!lines.some(line => line.id === id)) lines.push({ id, text }); return id; };
+  const act = (kind: Action["kind"], ingredients: (Ingredient | string)[], text: string) => actions.push({ kind, ingredientIds: ingredients.map(item => typeof item === "string" ? item : item.id), text });
+  const selectedIds = new Set(selected.map(item => item.id));
+  const items = selected.map(item => style === "Salad" && item.id === "coconut milk" ? { ...item, value: 80 } : item);
+  for (const ingredient of items) add(ingredient.id, formatIngredient(ingredient, servings));
+  if (style === "Potato" && !items.some(item => ["potato", "sweet potato"].includes(item.id))) {
+    const potato = { ...catalogue.potato, id: "potato", label: "Potato" } as Ingredient;
+    items.unshift(potato); add(potato.id, formatIngredient(potato, servings));
+  }
+  const protein = group(items, ["tofu", "cookedProtein"]);
+  const hasProtein = protein.length > 0;
+  let grain: string | null = null, stock: string | null = null, bread: string | null = null, saladBase: string | null = null;
+  if (style === "Salad") {
+    if (weight === "Light") saladBase = add("base-leaves", `${50 * servings / 2} g mixed salad leaves`);
+    else grain = add("base-couscous", `${120 * servings / 2} g dry couscous`);
+  }
+  if (style === "Potato" && weight === "Light") saladBase = add("base-leaves", `${50 * servings / 2} g mixed salad leaves`);
+  if (style === "Pasta") grain = add("base-pasta", `${(weight === "Hearty" ? 220 : 160) * servings / 2} g dried pasta`);
+  if (style === "Curry") grain = add("base-rice", `${(weight === "Hearty" ? 150 : 100) * servings / 2} g dry rice`);
+  if (style === "Soup" || style === "Stew") {
+    stock = add("base-stock", `${600 * servings / 2} ml vegetable stock`);
+    if (weight === "Hearty") bread = add("base-bread", `${servings} slices crusty bread`);
+  }
+  if (style === "Curry") stock = add("base-stock", `${(items.some(item => item.role === "liquid") ? 100 : 250) * servings / 2} ml vegetable stock or water`);
+  if (weight === "Hearty" && !hasProtein && ["Salad", "Potato", "Pasta", "Curry", "Soup", "Stew"].includes(style)) {
+    const bean = { ...catalogue.chickpeas, id: "chickpeas", label: "Chickpeas" } as Ingredient;
+    items.push(bean); add(bean.id, formatIngredient(bean, servings));
+  }
+  const flavour = options.flavour === "Surprise me" ? flavourNames[(hash(`${style}|${items.map(item => item.id).join("|")}|${options.round}`) + index) % flavourNames.length] : options.flavour;
+  let detail = flavors[flavour][options.round % 3];
+  if (flavour === "Creamy" && items.some(item => item.id === "coconut milk")) detail = { key: "coconut", line: "", use: "Simmer the coconut milk gently until the sauce is creamy.", selectedId: "coconut milk" };
+  const flavorId = detail.selectedId && selectedIds.has(detail.selectedId) ? detail.selectedId : `flavor-${detail.key}`;
+  if (flavorId.startsWith("flavor-") && detail.line) add(flavorId, scaleLine(detail.line, servings));
+  const oil = add("pantry-oil", `${1 * servings / 2} tbsp olive oil`);
+  const salt = add("pantry-seasoning", "Salt and black pepper, to taste");
+  let chili: string | null = null;
+  if (options.heat !== "Mild") chili = add("pantry-chili", scaleLine(options.heat === "Hot" ? "1 tsp chilli flakes" : "¼ tsp chilli flakes", servings));
+  let textureExtra: string | null = null;
+  if (options.texture === "Crisp") textureExtra = add("texture-seeds", scaleLine("2 tbsp pumpkin seeds", servings));
+  if (options.texture === "Fresh" && !items.some(item => ["coriander", "rocket", "lemon"].includes(item.id))) textureExtra = add("texture-parsley", "1 tbsp chopped parsley");
+  if (style === "Soup" || style === "Stew") {
+    if (weight === "Light") textureExtra = textureExtra ?? add("base-herbs", "1 handful fresh herbs");
+  }
+  // A preparation step does not count as using an ingredient; subsequent actions must consume every line.
+  act("prep", items, `Prepare the ingredients: ${items.map(item => item.prep).join("; ")}.`);
+  if (grain === "base-pasta") act("cook", [grain], "Cook the pasta in salted water until tender, reserving a mug of pasta water before draining.");
+  if (grain === "base-rice") act("cook", [grain], "Cook the rice according to its packet instructions.");
+  if (grain === "base-couscous") act("cook", [grain], "Prepare the couscous according to its packet instructions and fluff it with a fork.");
+  const aromatics = group(items, ["aromatic"]), firm = group(items, ["firm"]), quick = group(items, ["quick"]), tofu = group(items, ["tofu"]), beans = group(items, ["cookedProtein"]), leaves = group(items, ["leaf"]), finishing = group(items, ["finish"]), liquid = group(items, ["liquid"]);
+  const isSalad = style === "Salad", roasted = technique.mode === "roast";
+  const roastables = [...firm, ...quick.filter(item => item.roastable), ...tofu, ...beans.filter(item => item.roastable)];
+  const remainingQuick = roasted ? quick.filter(item => !item.roastable) : quick;
+  const remainingBeans = roasted ? beans.filter(item => !item.roastable) : beans;
+  if (roasted && !roastables.length) throw new Error(`Add a vegetable or protein that can be roasted to make three different ${style.toLowerCase()} recipes.`);
+  if (roasted && roastables.length) act("cook", [oil, ...roastables], `Heat the oven to 210°C. Toss ${names(roastables)} with the oil, spread on a roomy tray and roast for ${firm.length ? "25–35" : "15–20"} minutes, turning halfway, until tender and browned. Cook tofu thoroughly.`.replace(" Cook tofu thoroughly.", tofu.length ? " Cook tofu thoroughly." : ""));
+  if (aromatics.length) act("cook", [roasted ? "pantry-oil" : oil, ...aromatics], `Soften ${names(aromatics)} in a little oil for 2–3 minutes in a large pan.`);
+  let liquidUsed = false, firmUsed = false;
+  if (!roasted && firm.length && stock && (technique.mode === "simmer" || technique.mode === "broth")) {
+    act("cook", [stock, ...liquid, ...firm], `Add ${names(firm)} to ${liquid.length ? `${names(liquid)} and ` : ""}the stock. Simmer for 15–20 minutes until the vegetables are tender.`);
+    liquidUsed = true; firmUsed = true;
+  }
+  if (isSalad) {
+    if (!roasted && firm.length) act("cook", [oil, ...firm], `Cook ${names(firm)} in a pan until tender, then let cool slightly.`);
+    if (!roasted && tofu.length) act("cook", [oil, ...tofu], `Brown ${names(tofu)} in a pan for 6–8 minutes until cooked through, then cool slightly.`);
+    const rawQuick = technique.mode === "raw" ? remainingQuick.filter(item => ["tomato", "courgette", "red pepper"].includes(item.id)) : [];
+    const cookQuick = remainingQuick.filter(item => !rawQuick.includes(item));
+    if (cookQuick.length) act("cook", [oil, ...cookQuick], `Briefly sauté ${names(cookQuick)} until tender; cool slightly.`);
+    if (rawQuick.length) act("combine", rawQuick, `Keep ${names(rawQuick)} fresh for a crisp contrast.`);
+    if (remainingBeans.length) act(technique.mode === "warm" ? "cook" : "combine", remainingBeans, technique.mode === "warm" ? `Warm ${names(remainingBeans)} in the pan for 3 minutes, then fold through the salad.` : `Fold through ${names(remainingBeans)}.`);
+  } else if (technique.mode === "mash") {
+    if (firm.length) act("cook", [oil, ...firm], `Simmer ${names(firm)} in a little water for 15–20 minutes until tender. Drain, then lightly crush the potatoes and fold the other vegetables through.`);
+    if (remainingQuick.length) act("cook", [oil, ...remainingQuick], `Sauté ${names(remainingQuick)} for 4–6 minutes and fold through the crushed potatoes.`);
   } else {
-    if (aromatics.length) steps.push(`Warm the olive oil in a large pan and cook ${list(aromatics)} for 2–3 minutes until fragrant.`);
-    if (firm.length || quick.length) steps.push(`Add ${list([...firm, ...quick])}${roasted ? " from the roasting tray" : " to the pan"}. ${roasted ? "Stir gently." : `Cook for ${firm.length ? "8–12" : "4–6"} minutes, stirring; add a splash of water if needed.`}`);
-    if (style === "Soup" || style === "Stew") steps.push(`Pour in the vegetable stock and simmer ${style === "Stew" ? "15–20" : "10–15"} minutes, until all firm vegetables are tender.`);
-    if (style === "Curry") steps.push(`Add ${liquid.length ? list(liquid) : "the stock or water"} and simmer for 8–12 minutes, until the vegetables are cooked through.`);
-    if (proteins.length) steps.push(`Stir in ${list(proteins)}${roasted ? " from the tray" : ""} and heat through for 3–5 minutes.${proteins.includes("firm tofu") ? " Cook tofu thoroughly." : ""}`);
+    if (!roasted && firm.length && !firmUsed) act("cook", [oil, ...firm], `Cook ${names(firm)} for ${Math.max(...firm.map(item => item.cookMinutes))} minutes with a splash of water, until tender.`);
+    if (remainingQuick.length) act("cook", [oil, ...remainingQuick], `Add ${names(remainingQuick)} and cook for 4–7 minutes until tender.`);
   }
-  if (liquid.length && style !== "Curry") steps.push(`Stir in ${list(liquid)} and warm gently${style === "Salad" ? " as a dressing, then let cool" : " without boiling hard"}.`);
-  if (leaves.length) steps.push(style === "Salad" ? `Keep ${list(leaves)} fresh and fold through just before serving.` : `Stir in ${list(leaves)} for the last 2–3 minutes until wilted.`);
-  if (style === "Soup" && choice.name === "blended soup") steps.push("Blend the soup until smooth, then return it to the pan; thin with water if needed.");
-  steps.push(profile.sauce);
-  if (heat !== "Mild") steps.push(`Add the chilli flakes a little at a time for ${heat.toLowerCase()} heat.`);
-  if (style === "Salad") steps.push(`Toss everything with ${weight === "Hearty" ? "the couscous" : "the salad leaves"}.`);
-  if (style === "Pasta") steps.push("Toss the vegetables with the pasta, adding reserved pasta water until glossy.");
-  if (style === "Potato") steps.push(`Serve with ${weight === "Hearty" ? "warmed white beans" : "salad leaves"}.`);
-  if (style === "Curry") steps.push("Spoon the curry over the cooked rice.");
-  if (style === "Soup" || style === "Stew") steps.push(weight === "Hearty" ? "Serve with the crusty bread." : "Scatter fresh herbs over the bowl.");
-  if (finish.length) steps.push(`Add ${list(finish)} at the end, off the heat${style === "Salad" ? "" : ", so they keep their fresh flavour"}.`);
-  if (items.some(item => item.custom)) steps.push(`For ${list(items.filter(item => item.custom).map(item => item.label.toLowerCase()))}, follow any required cooking and food safety instructions on the packaging before serving.`);
-  steps.push(accent.step);
-  steps.push(`${profile.finish} Taste and season with salt and black pepper.`);
-  return { id: `${hash(selected.map(key).join("|"))}-${options.round}-${variant}`, title: title.charAt(0).toUpperCase() + title.slice(1), description: `${choice.name.charAt(0).toUpperCase()}${choice.name.slice(1)} with a ${profileName.toLowerCase()} finish. ${weight === "Hearty" ? "A filling" : "A lighter"} version with ${heat.toLowerCase()} heat.`, minutes: choice.minutes, servings, ingredients: allLines, steps, whyItFits: `Uses all ${items.length} chosen ingredient${items.length === 1 ? "" : "s"}.` };
+  if (!isSalad && !roasted && tofu.length) act("cook", [oil, ...tofu], `Brown ${names(tofu)} for 6–8 minutes, until cooked through.`);
+  if (!isSalad && remainingBeans.length) act("cook", remainingBeans, `Stir in ${names(remainingBeans)} and warm for 3–5 minutes.`);
+  if (isSalad && liquid.length) act("combine", liquid, `Whisk ${names(liquid)} into the dressing and mix with the salad.`);
+  if (!isSalad && (stock || liquid.length) && !liquidUsed) {
+    const liquids = [...(stock ? [stock] : []), ...liquid];
+    act("cook", [...liquids, ...(roasted ? roastables : [])], style === "Curry" ? `Add ${roasted ? "the roasted ingredients, " : ""}${liquid.length ? names(liquid) + " and " : ""}the stock or water and simmer for 5–10 minutes to bring the curry together.` : style === "Soup" || style === "Stew" ? `Add ${roasted ? "the roasted ingredients and " : ""}the stock${liquid.length ? ` with ${names(liquid)}` : ""} and simmer for 10–15 minutes until all vegetables are tender.` : `Stir in ${names(liquid)} and warm gently without boiling hard.`);
+  }
+  if (style === "Pasta" && technique.mode === "simmer") act("combine", [...firm, ...quick, ...tofu, ...beans], "Simmer the cooked vegetables with a splash of pasta water for 5 minutes to make a light sauce.");
+  if (["Soup", "Curry", "Stew"].includes(style) && technique.mode === "simmer") act("cook", [...(stock ? [stock] : []), ...liquid, ...quick, ...beans], "Let the pot bubble gently for another 8–10 minutes so the vegetables and sauce come together; add a splash of water if it becomes too thick.");
+  if (isSalad && stock) act("combine", [stock], "Use the stock to moisten the warm salad.");
+  if (technique.mode === "blend") act("combine", [...firm, ...quick, ...beans, ...tofu], "Blend the cooked soup until smooth; add water as needed to adjust its consistency.");
+  if (leaves.length) act(isSalad ? "combine" : "cook", leaves, isSalad ? `Fold in ${names(leaves)} just before serving.` : `Add ${names(leaves)} for the final 2–3 minutes, until just wilted.`);
+  if (flavorId === "coconut milk" && liquid.some(item => item.id === "coconut milk")) act("cook", [flavorId], detail.use);
+  else if (flavorId === "lemon" && finishing.some(item => item.id === "lemon")) act("finish", [flavorId], detail.use);
+  else if (detail.line) act("combine", [flavorId], detail.use);
+  if (chili) act("combine", [chili], `Add the chilli flakes a little at a time for ${options.heat.toLowerCase()} heat.`);
+  const otherFinishing = finishing.filter(item => !(flavorId === "lemon" && item.id === "lemon"));
+  if (otherFinishing.length) act("finish", otherFinishing, `Add ${names(otherFinishing)} off the heat just before serving.`);
+  if (textureExtra) act("finish", [textureExtra], textureExtra === "texture-seeds" ? "Toast the pumpkin seeds in a dry pan and scatter them over the dish for crunch." : `Scatter ${textureExtra === "base-herbs" ? "fresh herbs" : "parsley"} over the dish.`);
+  if (saladBase) act("serve", [saladBase], `Toss the prepared ingredients with the salad leaves.`);
+  if (style === "Salad" && grain) act("serve", [grain], "Toss the prepared ingredients with the cooked couscous.");
+  if (style === "Pasta" && grain) act("serve", [grain], "Toss the cooked vegetables and sauce with the pasta, adding reserved pasta water if needed.");
+  if (style === "Curry" && grain) act("serve", [grain], "Serve the curry over the cooked rice.");
+  if (bread) act("serve", [bread], "Serve with the crusty bread.");
+  if (!actions.some(action => action.kind !== "prep" && action.ingredientIds.includes(oil))) act("combine", [oil], isSalad ? "Whisk the olive oil into the dressing." : "Finish with a little olive oil.");
+  act("finish", [salt], "Taste and season with salt and black pepper before serving.");
+  const spotlight = items.filter(item => !["aromatic", "finish", "liquid"].includes(item.role));
+  const lead = spotlight[(options.round + index) % Math.max(spotlight.length, 1)] ?? items[0];
+  const second = spotlight.filter(item => item !== lead)[(options.round + index) % Math.max(spotlight.length - 1, 1)];
+  const title = `${lead.label}${second ? ` and ${second.label.toLowerCase()}` : ""} ${technique.label} · ${flavour.toLowerCase()}`;
+  const prepMinutes = 6 + items.length * 2 + (servings > 2 ? 3 : 0);
+  const firmMinutes = firm.length ? Math.max(...firm.map(item => item.cookMinutes)) : 0;
+  const activeMinutes = roasted ? Math.max(firm.length ? 35 : 20, 15) + 5 :
+    isSalad ? firmMinutes + (tofu.length ? 8 : 0) + (quick.length ? 5 : 0) + 5 :
+    (aromatics.length ? 3 : 0) + (firmUsed ? Math.max(15, firmMinutes) : firmMinutes) +
+    (quick.length ? 5 : 0) + (tofu.length ? 8 : 0) + (stock && !liquidUsed ? 10 : 0) + 5;
+  const minutes = Math.max(technique.minutes, prepMinutes + activeMinutes);
+  return { title, description: `${technique.label[0].toUpperCase()}${technique.label.slice(1)} with a ${flavour.toLowerCase()} finish and ${options.texture === "Surprise me" ? technique.texture.toLowerCase() : options.texture.toLowerCase()} texture.`, minutes, servings, lines, actions, technique, flavour };
 }
-export function generateRecipes(options: Options) { return [0, 1, 2].map(variant => makeRecipe(options, variant)); }
+
+export function generateRecipes(options: Options) {
+  const selected = resolveIngredients(options.ingredients, options.customKinds);
+  const selectionError = validateSelection(options.style, selected);
+  if (selectionError) throw new Error(selectionError);
+  const candidates = blueprints[options.style].techniques.map((technique, index) => makePlan(options, selected, technique, index));
+  const valid = candidates.filter(plan => !validatePlan(plan, selected, options.pace));
+  const setError = validateSet(valid);
+  if (setError) throw new Error(setError);
+  return valid.map((plan, index) => ({
+    id: `${hash(`${selected.map(item => item.id).join("|")}|${options.style}|${options.weight}`)}-${options.round}-${plan.technique.id}`,
+    title: plan.title, description: plan.description, minutes: plan.minutes, servings: plan.servings,
+    ingredients: plan.lines.map(line => line.text), steps: plan.actions.map(action => action.text),
+    whyItFits: `Uses all ${selected.length} chosen ingredient${selected.length === 1 ? "" : "s"}. Different cooking approach: ${plan.technique.label}.`
+  }));
+}
