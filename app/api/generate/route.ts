@@ -29,7 +29,7 @@ export async function POST(request: Request) {
       customKinds: Object.fromEntries(Object.entries(body.customKinds).map(([name, kind]) => [normalize(name), kind])) as Record<string, CustomKind>,
       flavour: body.flavour as Flavour, texture: body.texture as Texture, pace: body.pace as Pace, heat: body.heat as Heat,
       servings: body.servings as number, round: body.round as number });
-    return Response.json({ recipes, source: "validated-blueprints" }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json({ recipes, source: body.style === "Curry" ? "planned-curry" : "validated-blueprints" }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Could not make a valid recipe." }, { status: 422 });
   }
