@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties, type FormEvent } from "react";
+import { catalogue, normalize, type CustomKind } from "./ingredient-catalogue";
 
 type Recipe = { id: string; title: string; description: string; minutes: number; servings: number; ingredients: string[]; steps: string[]; whyItFits: string };
 type Style = "Salad" | "Potato" | "Soup" | "Pasta" | "Curry" | "Stew";
@@ -14,6 +15,8 @@ const defaultTheme: Theme = { canvas: "#fff4c4", ink: "#000000", accent: "#bb533
 const styles: Style[] = ["Salad", "Potato", "Soup", "Pasta", "Curry", "Stew"];
 const starterIngredients = ["Potato", "Tomato", "Onion", "Garlic", "Courgette", "Carrot", "Spinach", "Butter beans", "Chickpeas", "Lentils", "Tofu", "Coriander", "Ginger", "Coconut milk", "Parmesan", "Lemon"];
 const ingredientKey = "supper-club-ingredients-v1";
+const customKindsKey = "recgen-custom-ingredient-kinds-v1";
+const customKindOptions: [CustomKind, string][] = [["vegetable", "Vegetable to cook"], ["cooked", "Already cooked / ready to eat"], ["fresh", "Fresh garnish"], ["sauce", "Sauce or liquid"]];
 const themeKey = "recgen-ui-theme-v1";
 const hexPattern = /^#[0-9a-f]{6}$/i;
 
@@ -33,6 +36,8 @@ export default function RecipeBuilder() {
   const [weight, setWeight] = useState<Weight | null>(null);
   const [panel, setPanel] = useState<"ingredients" | "studio" | null>(null);
   const [newIngredient, setNewIngredient] = useState("");
+  const [newIngredientKind, setNewIngredientKind] = useState<CustomKind | "">("");
+  const [customKinds, setCustomKinds] = useState<Record<string, CustomKind>>({});
   const [theme, setTheme] = useState<Theme>(defaultTheme);
   const [savedTheme, setSavedTheme] = useState<Theme>(defaultTheme);
   const [draftTheme, setDraftTheme] = useState<Theme>(defaultTheme);
@@ -53,6 +58,8 @@ export default function RecipeBuilder() {
     try {
       const storedIngredients = JSON.parse(localStorage.getItem(ingredientKey) || "null");
       if (Array.isArray(storedIngredients) && storedIngredients.length <= 100 && storedIngredients.every(item => typeof item === "string")) setIngredients(storedIngredients);
+      const storedKinds = JSON.parse(localStorage.getItem(customKindsKey) || "null");
+      if (storedKinds && typeof storedKinds === "object" && !Array.isArray(storedKinds)) setCustomKinds(Object.fromEntries(Object.entries(storedKinds).filter(([name, kind]) => name.length <= 60 && customKindOptions.some(([option]) => option === kind))) as Record<string, CustomKind>);
       const storedTheme = JSON.parse(localStorage.getItem(themeKey) || "null") as Theme | null;
       if (storedTheme && [storedTheme.canvas, storedTheme.ink, storedTheme.accent, storedTheme.positive].every(value => typeof value === "string" && hexPattern.test(value)) && contrastRatio(storedTheme.canvas, storedTheme.ink) >= 4.5) {
         setTheme(storedTheme); setSavedTheme(storedTheme); setDraftTheme(storedTheme);
@@ -61,6 +68,7 @@ export default function RecipeBuilder() {
     setHydrated(true);
   }, []);
   useEffect(() => { if (hydrated) { try { localStorage.setItem(ingredientKey, JSON.stringify(ingredients)); } catch {} } }, [ingredients, hydrated]);
+  useEffect(() => { if (hydrated) { try { localStorage.setItem(customKindsKey, JSON.stringify(customKinds)); } catch {} } }, [customKinds, hydrated]);
   useEffect(() => {
     document.documentElement.style.backgroundColor = theme.canvas;
     document.body.style.backgroundColor = theme.canvas;
@@ -90,11 +98,13 @@ export default function RecipeBuilder() {
   function addIngredient(event: FormEvent) {
     event.preventDefault();
     const name = newIngredient.trim().replace(/\s+/g, " ");
-    if (!name || name.length > 60 || ingredients.length >= 100 || ingredients.some(item => item.toLocaleLowerCase() === name.toLocaleLowerCase())) return;
-    setIngredients(current => [...current, name]); setNewIngredient("");
+    if (!name || name.length > 60 || ingredients.length >= 100 || ingredients.some(item => item.toLocaleLowerCase() === name.toLocaleLowerCase()) || (!catalogue[normalize(name)] && !newIngredientKind)) return;
+    if (!catalogue[normalize(name)] && newIngredientKind) setCustomKinds(current => ({ ...current, [normalize(name)]: newIngredientKind }));
+    setIngredients(current => [...current, name]); setNewIngredient(""); setNewIngredientKind("");
   }
   function removeIngredient(name: string) {
     setIngredients(current => current.filter(item => item !== name));
+    setCustomKinds(current => { const next = { ...current }; delete next[normalize(name)]; return next; });
     setSelected(current => current.filter(item => item !== name));
     setRecipes([]); setRound(0);
   }
@@ -106,7 +116,7 @@ export default function RecipeBuilder() {
     if (!style || !weight || !selected.length || loading) return;
     setLoading(true); setError(""); setRecipes([]);
     try {
-      const response = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ style, weight, ingredients: selected, flavour, texture, pace, heat, servings, round }) });
+      const response = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ style, weight, ingredients: selected, customKinds, flavour, texture, pace, heat, servings, round }) });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Could not generate recipes.");
       setRecipes(data.recipes); setRound(current => current + 1); setExpanded(0);
@@ -147,7 +157,7 @@ export default function RecipeBuilder() {
         </div>
       </section>
 
-      <section className="action-section"><button className="generate-button" type="button" disabled={!style || !weight || !selected.length || loading} onClick={generate}>{loading ? "Making your menu…" : recipes.length ? "Generate three more" : "Generate three ideas"}<span aria-hidden="true">↗︎</span></button><p>{selected.length ? `${selected.length} ingredient${selected.length === 1 ? "" : "s"} selected` : "Select at least one ingredient to continue"}</p>{error && <p className="error" role="alert">{error}</p>}</section>
+      <section className="action-section"><button className="generate-button" type="button" disabled={!style || !weight || !selected.length || loading} onClick={generate}>{loading ? "Making your menu…" : recipes.length ? "Generate three more" : "Generate three ideas"}<span aria-hidden="true">↗︎</span></button><p>{selected.length ? `${selected.length} ingredient${selected.length === 1 ? "" : "s"} selected${selected.length > 8 ? " · choose up to eight" : ""}` : "Select at least one ingredient to continue"}</p>{error && <p className="error" role="alert">{error}</p>}</section>
 
       {(recipes.length > 0 || loading) && <section className="results" id="ideas" aria-live="polite"><div className="results-heading"><h1>{style} · {weight}</h1><p className="selected-subheading">{selected.join(" · ")}</p><p className="catalogue-count">Generated for your choices · {flavour} flavour · {texture} texture · {pace} · {heat} heat · {servings} servings</p></div>{loading ? <div className="loading-card" role="status">Creating three recipes for you…</div> : <div className="recipe-list">{recipes.map((recipe, index) => <article className="recipe-card" key={`${recipe.title}-${index}`}><div className="recipe-meta"><span>IDEA {String(index + 1).padStart(2, "0")}</span><span>{recipe.minutes} MIN · {recipe.servings} SERVINGS</span></div><h3>{recipe.title}</h3><p className="description">{recipe.description}</p><p className="fit">{recipe.whyItFits}</p><button className="recipe-toggle" type="button" aria-expanded={expanded === index} onClick={() => setExpanded(expanded === index ? null : index)}>{expanded === index ? "Hide recipe" : "View recipe"}<span aria-hidden="true">{expanded === index ? "−" : "+"}</span></button>{expanded === index && <div className="recipe-detail"><h4>Ingredients</h4><ul>{recipe.ingredients.map((ingredient, i) => <li key={i}>{ingredient}</li>)}</ul><h4>Method</h4><ol>{recipe.steps.map((step, i) => <li key={i}>{step}</li>)}</ol></div>}</article>)}</div>}</section>}
     </main>
@@ -155,7 +165,7 @@ export default function RecipeBuilder() {
     <nav className="bottom-dock" aria-label="Recipe steps"><a href="#dish">Dish</a><a href="#ingredients">Ingredients</a><a href="#feel">Feel</a><a href="#ideas" aria-disabled={!recipes.length}>{recipes.length ? "Ideas" : "Ideas"}</a></nav>
 
     {panel && <div className="panel-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) closePanel(); }}><section className="settings-panel" role="dialog" aria-modal="true" aria-labelledby="panel-title"><div className="panel-heading"><div><p className="eyebrow">{panel === "studio" ? "APPEARANCE" : "YOUR PANTRY"}</p><h2 id="panel-title">{panel === "studio" ? "UI Studio" : "Ingredient list"}</h2></div><button className="round-control" type="button" onClick={closePanel} aria-label="Close settings">×</button></div>
-      {panel === "studio" ? <><p className="panel-intro">Change the colors of the recipe generator. Preview them live, then save them for this browser.</p><div className="studio-fields">{([ ["canvas", "Canvas / background"], ["ink", "Ink / text and borders"], ["accent", "Accent / attention"], ["positive", "Positive / calm"] ] as [keyof Theme, string][]).map(([key, label]) => <label className="color-field" key={key}><span>{label}</span><span><input type="color" value={hexPattern.test(draftTheme[key]) ? draftTheme[key] : "#000000"} onChange={event => updateTheme(key, event.target.value)} aria-label={`${label} color picker`} /><input value={draftTheme[key]} onChange={event => updateTheme(key, event.target.value)} maxLength={7} aria-label={`${label} hex value`} /></span></label>)}</div><div className="theme-preview" style={{ background: draftTheme.canvas, color: draftTheme.ink }}><strong>Recipe preview</strong><span>Cards and type inherit these colors.</span><span style={{ color: draftTheme.accent }}>Accent for attention</span><span style={{ color: draftTheme.positive }}>Positive for calm</span></div>{studioMessage && <p className="status-message" role="status">{studioMessage}</p>}<div className="panel-actions"><button type="button" className="secondary-button" onClick={resetTheme}>Reset defaults</button><button type="button" className="primary-button" onClick={saveTheme}>Save colors</button></div></> : <><p className="panel-intro">Add or remove ingredients whenever you like. Changes are saved in this browser.</p><form className="add-form" onSubmit={addIngredient}><label htmlFor="new-ingredient">Add an ingredient</label><div><input id="new-ingredient" value={newIngredient} onChange={event => setNewIngredient(event.target.value)} maxLength={60} placeholder="e.g. Aubergine" /><button type="submit" disabled={!newIngredient.trim() || ingredients.length >= 100}>Add</button></div></form><div className="pantry-list"><h3>Your ingredients <span>{ingredients.length}</span></h3>{ingredients.map(name => <div className="pantry-row" key={name}><span>{name}</span><button type="button" onClick={() => removeIngredient(name)} aria-label={`Remove ${name}`}>Remove</button></div>)}{!ingredients.length && <p className="muted">No ingredients yet.</p>}</div><button className="primary-button full-width" type="button" onClick={closePanel}>Done</button></>}
+      {panel === "studio" ? <><p className="panel-intro">Change the colors of the recipe generator. Preview them live, then save them for this browser.</p><div className="studio-fields">{([ ["canvas", "Canvas / background"], ["ink", "Ink / text and borders"], ["accent", "Accent / attention"], ["positive", "Positive / calm"] ] as [keyof Theme, string][]).map(([key, label]) => <label className="color-field" key={key}><span>{label}</span><span><input type="color" value={hexPattern.test(draftTheme[key]) ? draftTheme[key] : "#000000"} onChange={event => updateTheme(key, event.target.value)} aria-label={`${label} color picker`} /><input value={draftTheme[key]} onChange={event => updateTheme(key, event.target.value)} maxLength={7} aria-label={`${label} hex value`} /></span></label>)}</div><div className="theme-preview" style={{ background: draftTheme.canvas, color: draftTheme.ink }}><strong>Recipe preview</strong><span>Cards and type inherit these colors.</span><span style={{ color: draftTheme.accent }}>Accent for attention</span><span style={{ color: draftTheme.positive }}>Positive for calm</span></div>{studioMessage && <p className="status-message" role="status">{studioMessage}</p>}<div className="panel-actions"><button type="button" className="secondary-button" onClick={resetTheme}>Reset defaults</button><button type="button" className="primary-button" onClick={saveTheme}>Save colors</button></div></> : <><p className="panel-intro">Add or remove ingredients whenever you like. Changes are saved in this browser.</p><form className="add-form" onSubmit={addIngredient}><label htmlFor="new-ingredient">Add an ingredient</label><div><input id="new-ingredient" value={newIngredient} onChange={event => setNewIngredient(event.target.value)} maxLength={60} placeholder="e.g. Aubergine" /><button type="submit" disabled={!newIngredient.trim() || ingredients.length >= 100 || (!catalogue[normalize(newIngredient)] && !newIngredientKind)}>Add</button></div><label htmlFor="new-ingredient-kind">Preparation type for a custom ingredient</label><select id="new-ingredient-kind" value={newIngredientKind} onChange={event => setNewIngredientKind(event.target.value as CustomKind | "")}><option value="">Choose a type</option>{customKindOptions.map(([kind, title]) => <option value={kind} key={kind}>{title}</option>)}</select><p className="custom-hint">Use “Already cooked” only for food that is fully cooked as supplied. Dried beans and ingredients needing special preparation need a dedicated catalogue entry.</p></form><div className="pantry-list"><h3>Your ingredients <span>{ingredients.length}</span></h3>{ingredients.map(name => <div className="pantry-row" key={name}><span>{name}</span>{!catalogue[normalize(name)] && <select aria-label={`Preparation type for ${name}`} value={customKinds[normalize(name)] ?? ""} onChange={event => { setCustomKinds(current => ({ ...current, [normalize(name)]: event.target.value as CustomKind })); setRecipes([]); setRound(0); }}><option value="">Choose type</option>{customKindOptions.map(([kind, title]) => <option value={kind} key={kind}>{title}</option>)}</select>}<button type="button" onClick={() => removeIngredient(name)} aria-label={`Remove ${name}`}>Remove</button></div>)}{!ingredients.length && <p className="muted">No ingredients yet.</p>}</div><button className="primary-button full-width" type="button" onClick={closePanel}>Done</button></>}
     </section></div>}
   </div>;
 }
