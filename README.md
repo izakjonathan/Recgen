@@ -1,16 +1,13 @@
 # Recipe Generator
 
-A Next.js recipe catalogue with 120 named vegetarian dishes, each offered in Light and Hearty versions: 240 recipe editions total. Choose a dish style, select ingredients and get three matching recipes with quantities and cooking steps. No API key, credits or external AI service is required.
+A Next.js vegetarian recipe generator that creates three recipes from the selected dish, ingredients, Light/Hearty setting, flavour, texture, cooking time, heat and servings. It runs locally on the server without an API key or usage credits.
 
 ## Run locally
 
-1. Run `npm install`.
-2. Run `npm run dev` and open http://localhost:3000.
+Run `npm install` and `npm run dev`.
 
-## How matching works
+## How generation works
 
-The data lives in `app/api/generate/library.ts`. Each recipe defines a title, dish style, core ingredients, flavour profile and description. The server expands the Light and Hearty editions, ranks recipes by natural overlap with the selected ingredients, then adds every remaining selected ingredient to each returned recipe's ingredient list and method. “Generate three more” avoids repeats until the selected category has been exhausted. Custom ingredients are included with a generic quantity and preparation guidance; review the result for culinary fit and safe preparation.
+`app/api/generate/generator.ts` contains ingredient preparation metadata, dish techniques and flavour profiles. It combines the selected parameters to build a title, scaled ingredient list and ordered cooking method. All chosen ingredients are included in each result. “Generate three more” changes the variation round. The number of possible combinations is large and grows as ingredients are added, but repeated requests with identical choices may eventually produce similar dishes; this is a rule based generator, not a language model.
 
-Add recipes by adding a row to the relevant style in `rows`, using `Title|Ingredient,Ingredient|flavourKey|Description`; define quantities for new ingredients in `quantity` and flavour profiles in `flavours`. Existing starters can be changed in `app/recipe-builder.tsx`. The ingredient editor and UI Studio save changes locally in the same browser. Results are not saved after refreshing.
-
-The library is original, authored for this site. Each entry has a named combination, while cooking methods are built from shared dish-style and flavour instructions. Review and refine individual entries before using them for a commercial recipe publication.
+The starter ingredient list is in `app/recipe-builder.tsx`. You can add or remove ingredients in the site's ingredient editor; the list and UI Studio colours are saved in the browser. For a custom ingredient without known preparation metadata, the generator includes it with a generic quantity and advises following its food safety instructions. Add its quantity, role and preparation in `known` to get a fully tailored method. Review generated recipes before cooking, especially custom ingredients or unusually large selections.
